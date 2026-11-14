@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ridea — AI Creative Partner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink-950:#0d0c10; --ink-900:#151318; --ink-850:#1b181f; --ink-800:#221f27;
+    --hairline:rgba(255,255,255,0.09); --hairline-strong:rgba(255,255,255,0.16);
+    --brass:#c9a15c; --emerald:#3f8a72; --wine:#8a4a52;
+    --paper:#f4efe4; --paper-dim:#a39d8e;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  :root[data-theme="teal"]{
+    --ink-950:#071413; --ink-900:#0c1f1c; --ink-850:#112a25; --ink-800:#16352e;
+    --hairline:rgba(255,255,255,0.08); --hairline-strong:rgba(255,255,255,0.15);
+    --brass:#2dd4bf; --emerald:#ff8a65; --wine:#6d7fe0;
+    --paper:#eaf7f4; --paper-dim:#88ada6;
+  }
+  :root[data-theme="northstar"]{
+    --ink-950:#070911; --ink-900:#0d1020; --ink-850:#131629; --ink-800:#191d33;
+    --hairline:rgba(255,255,255,0.09); --hairline-strong:rgba(255,255,255,0.17);
+    --brass:#7dc4ff; --emerald:#9d8cf0; --wine:#5f7a9e;
+    --paper:#eef2fb; --paper-dim:#8892b3;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0; background:var(--ink-950); color:var(--paper); font-family:"Inter",system-ui,sans-serif;
+    min-height:100%; position:relative; overflow-x:hidden; transition:background .3s ease, color .3s ease;}
+  h1,h2,h3,.serif{font-family:"Fraunces",Georgia,serif;}
+  a{color:inherit; text-decoration:none;}
+  button{font-family:inherit;}
+  ::-webkit-scrollbar{width:9px; height:7px;}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.14); border-radius:8px;}
+
+  .texture{position:fixed; inset:0; z-index:0; pointer-events:none;}
+  .texture .grain{position:absolute; inset:-2px; opacity:.05; mix-blend-mode:overlay;}
+  .texture .vignette{position:absolute; inset:0;
+    background:radial-gradient(120% 90% at 50% -10%, rgba(255,255,255,0.05), transparent 45%),
+               radial-gradient(140% 100% at 50% 120%, rgba(0,0,0,0.55), transparent 55%);}
+  .texture .glow{position:absolute; top:-10%; right:-8%; width:46%; height:46%;
+    background:radial-gradient(circle, color-mix(in srgb, var(--brass) 18%, transparent), transparent 70%); filter:blur(10px); transition:background .3s ease;}
+  .texture .glow2{position:absolute; bottom:-14%; left:-6%; width:40%; height:40%;
+    background:radial-gradient(circle, color-mix(in srgb, var(--emerald) 16%, transparent), transparent 70%); filter:blur(10px); transition:background .3s ease;}
+
+  .shell{position:relative; z-index:1; display:flex; min-height:100vh;}
+
+  .rail{width:76px; flex:none; border-right:1px solid var(--hairline); display:flex; flex-direction:column;
+    align-items:center; padding:20px 0 16px; gap:26px; background:rgba(255,255,255,0.015);}
+  .rail-mark{width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(150deg, var(--brass), color-mix(in srgb, var(--brass) 55%, black));
+    color:var(--ink-950); font-family:"Fraunces"; font-weight:600; font-size:1.05rem;}
+  .rail-nav{display:flex; flex-direction:column; gap:6px; margin-top:4px;}
+  .rail-item{position:relative; width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    color:var(--paper-dim); cursor:pointer; transition:background .15s ease, color .15s ease;}
+  .rail-item svg{width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round;}
+  .rail-item:hover{background:rgba(255,255,255,0.06); color:var(--paper);}
+  .rail-item.active{background:color-mix(in srgb, var(--brass) 16%, transparent); color:var(--brass);}
+  .rail-item.active::before{content:""; position:absolute; left:-1px; top:50%; transform:translateY(-50%);
+    width:2px; height:18px; background:var(--brass); border-radius:2px;}
+  .rail-item .tip{position:absolute; left:56px; top:50%; transform:translateY(-50%) translateX(-4px);
+    background:var(--ink-800); border:1px solid var(--hairline-strong); color:var(--paper); font-size:.75rem;
+    padding:6px 10px; border-radius:8px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s ease, transform .15s ease; z-index:5;}
+  .rail-item:hover .tip{opacity:1; transform:translateY(-50%) translateX(0);}
+  .rail-bottom{margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:14px;}
+  .rail-avatar{width:38px; height:38px; border-radius:50%;
+    background:linear-gradient(150deg, var(--emerald), color-mix(in srgb, var(--emerald) 45%, black));
+    border:1px solid var(--hairline-strong); display:flex; align-items:center; justify-content:center; font-family:"Fraunces"; font-weight:600; font-size:.85rem;}
+
+  .topline{display:none;}
+  .hamburger{display:none;}
+  .drawer-backdrop{display:none;}
+
+  .main{flex:1; min-width:0; padding:30px 40px 60px;}
+  .wrap{max-width:1120px; margin:0 auto;}
+
+  .utility{display:flex; align-items:center; gap:14px; margin-bottom:44px; flex-wrap:wrap;}
+  .search-pill{flex:1 1 200px; min-width:0; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,0.04);
+    border:1px solid var(--hairline); border-radius:30px; padding:10px 16px; color:var(--paper-dim); font-size:.86rem;}
+  .search-pill svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.7; flex:none;}
+  .search-pill span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  .theme-switch{display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.04); border:1px solid var(--hairline);
+    border-radius:30px; padding:6px 10px 6px 14px; flex:none;}
+  .theme-switch .tlabel{font-size:.74rem; color:var(--paper-dim); font-weight:600; white-space:nowrap;}
+  .swatch{width:22px; height:22px; border-radius:50%; border:2px solid transparent; cursor:pointer; padding:0;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); transition:transform .15s ease, border-color .15s ease;}
+  .swatch:hover{transform:translateY(-1px);}
+  .swatch.active{border-color:var(--paper);}
+  .swatch.sw-brass{background:linear-gradient(135deg,#c9a15c,#3f8a72);}
+  .swatch.sw-teal{background:linear-gradient(135deg,#2dd4bf,#ff8a65);}
+  .swatch.sw-northstar{background:linear-gradient(135deg,#7dc4ff,#9d8cf0);}
+
+  .credits-pill{display:flex; align-items:center; gap:7px; background:rgba(255,255,255,0.04); border:1px solid var(--hairline);
+    border-radius:30px; padding:9px 15px; font-size:.82rem; font-weight:600; color:var(--brass); white-space:nowrap;}
+  .util-icon{width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,0.04); border:1px solid var(--hairline);
+    display:flex; align-items:center; justify-content:center; flex:none;}
+  .util-icon svg{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.7;}
+  .util-avatar{width:38px; height:38px; border-radius:50%; flex:none;
+    background:linear-gradient(150deg, var(--wine), color-mix(in srgb, var(--wine) 45%, black)); border:1px solid var(--hairline-strong);}
+
+  .hero{margin-bottom:34px;}
+  .hero h1{margin:0 0 12px; font-size:2.9rem; font-weight:500; line-height:1.08; letter-spacing:-.5px;}
+  .hero h1 em{font-style:italic; font-weight:500; color:var(--brass);}
+  .hero p{margin:0; color:var(--paper-dim); font-size:1.02rem; max-width:520px; line-height:1.5;}
+
+  .quick-panel{margin-top:26px; background:rgba(255,255,255,0.035);
+    border:1px solid var(--hairline); border-radius:18px; padding:16px 16px 14px;}
+
+  .visually-hidden{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+    clip:rect(0,0,0,0); white-space:nowrap; border:0; opacity:0;}
+  .attach-wrap{position:relative;}
+  .attach-popover{position:absolute; top:52px; left:0; width:216px; background:var(--ink-800);
+    border:1px solid var(--hairline-strong); border-radius:14px; padding:8px; z-index:20;
+    box-shadow:0 20px 44px -16px rgba(0,0,0,0.6); opacity:0; pointer-events:none;
+    transform:translateY(6px); transition:opacity .18s ease, transform .18s ease;}
+  .attach-popover.open{opacity:1; pointer-events:auto; transform:translateY(0);}
+  .attach-popover .popover-label{font-size:.68rem; font-weight:600; color:var(--paper-dim); padding:4px 8px 8px; white-space:nowrap;}
+  .attach-popover-item{display:flex; align-items:center; gap:9px; width:100%; padding:8px; border-radius:9px;
+    cursor:pointer; font-size:.8rem; color:var(--paper); background:none; border:none; text-align:left; font-family:"Inter";}
+  .attach-popover-item:hover{background:rgba(255,255,255,0.07);}
+  .attach-popover-item svg{width:15px; height:15px; stroke:var(--brass); fill:none; stroke-width:1.7; flex:none;}
+
+  .type-tabs{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .type-tab{display:flex; align-items:center; gap:7px; padding:8px 14px; border-radius:20px; cursor:pointer;
+    background:rgba(255,255,255,0.03); border:1px solid var(--hairline); color:var(--paper-dim);
+    font-size:.82rem; font-weight:600; transition:background .18s ease, color .18s ease, border-color .18s ease;}
+  .type-tab svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8; flex:none;}
+  .type-tab:hover{color:var(--paper); border-color:var(--hairline-strong);}
+  .type-tab.active{background:color-mix(in srgb, var(--brass) 18%, transparent); border-color:color-mix(in srgb, var(--brass) 45%, transparent); color:var(--brass);}
+
+  .quick-row{display:flex; align-items:center; gap:10px;}
+  .quick-input{flex:1; min-width:0; background:transparent; border:none; color:var(--paper); font-size:.95rem; padding:12px 0; font-family:"Inter";}
+  .quick-input::placeholder{color:var(--paper-dim);}
+  .quick-input:focus{outline:none;}
+  .quick-actions{display:flex; align-items:center; gap:8px; flex:none;}
+  .ghost-btn{width:42px; height:42px; border-radius:12px; background:rgba(255,255,255,0.04); border:1px solid var(--hairline);
+    color:var(--paper-dim); display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;}
+  .ghost-btn:hover{color:var(--paper); border-color:var(--hairline-strong);}
+  .ghost-btn.has-files{color:var(--brass); border-color:color-mix(in srgb, var(--brass) 45%, transparent);}
+  .ghost-btn svg{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.7;}
+  .generate-btn{background:var(--brass); color:var(--ink-950); border:none; font-weight:600; font-size:.9rem;
+    padding:12px 22px; border-radius:12px; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:7px;
+    transition:box-shadow .2s ease, transform .15s ease, background .3s ease, opacity .2s ease;}
+  .generate-btn:hover{box-shadow:0 10px 26px -10px color-mix(in srgb, var(--brass) 70%, transparent); transform:translateY(-1px);}
+  .generate-btn svg{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8;}
+  .generate-btn.loading{opacity:.75; cursor:default; pointer-events:none;}
+  .generate-btn .spin{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .file-chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:0;}
+  .file-chips:not(:empty){margin-top:12px;}
+  .file-chip{display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.05); border:1px solid var(--hairline);
+    border-radius:10px; padding:6px 8px 6px 10px; font-size:.76rem; color:var(--paper-dim); max-width:220px;}
+  .file-chip .fname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--paper);}
+  .file-chip .fsize{flex:none; opacity:.7;}
+  .file-chip .fremove{flex:none; width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,0.08); cursor:pointer; font-size:.7rem; line-height:1;}
+  .file-chip .fremove:hover{background:rgba(255,255,255,0.18); color:var(--paper);}
+
+  .settings-panel{display:grid; grid-template-rows:0fr; transition:grid-template-rows .28s ease;}
+  .settings-panel.open{grid-template-rows:1fr; margin-top:14px;}
+  .settings-inner{overflow:hidden; display:flex; flex-wrap:wrap; gap:22px;}
+  .setting-group{display:flex; flex-direction:column; gap:8px;}
+  .setting-label{font-size:.72rem; font-weight:600; color:var(--paper-dim); text-transform:none;}
+  .chip-row{display:flex; flex-wrap:wrap; gap:7px;}
+  .chip{padding:6px 12px; border-radius:9px; background:rgba(255,255,255,0.03); border:1px solid var(--hairline);
+    color:var(--paper-dim); font-size:.78rem; font-weight:600; cursor:pointer; transition:all .15s ease;}
+  .chip:hover{color:var(--paper); border-color:var(--hairline-strong);}
+  .chip.active{background:var(--brass); border-color:var(--brass); color:var(--ink-950);}
+
+  .ratio-chip{display:flex; align-items:center; gap:9px; padding:7px 12px 7px 10px; text-align:left;}
+  .ratio-swatch{flex:none; border:1.6px solid currentColor; border-radius:3px; opacity:.9;}
+  .ratio-text{display:flex; flex-direction:column; line-height:1.25;}
+  .ratio-text b{font-size:.8rem; font-weight:700;}
+  .ratio-text small{font-size:.68rem; font-weight:500; opacity:.75;}
+  .chip.ratio-chip.active .ratio-text small{opacity:.7;}
+
+  .script-wizard:not(:empty){margin-top:16px; padding-top:16px; border-top:1px solid var(--hairline);}
+  .wizard-step{display:flex; flex-direction:column; gap:12px;}
+  .wizard-label{font-size:.86rem; font-weight:600; color:var(--paper);}
+  .wizard-label b{color:var(--brass);}
+  .wizard-back{align-self:flex-start; background:none; border:none; color:var(--paper-dim); font-size:.78rem;
+    font-weight:600; cursor:pointer; padding:0; font-family:"Inter";}
+  .wizard-back:hover{color:var(--brass);}
+  .wizard-text-btn{background:none; border:none; color:var(--paper-dim); font-size:.82rem; font-weight:600;
+    cursor:pointer; padding:0; font-family:"Inter";}
+  .wizard-text-btn:hover{color:var(--brass);}
+  .wizard-tag{font-size:.7rem; font-weight:600; color:var(--paper-dim); border:1px solid var(--hairline-strong);
+    border-radius:20px; padding:2px 9px; vertical-align:middle;}
+  .wizard-tags-row{display:flex; flex-wrap:wrap; gap:6px;}
+
+  .wizard-title-row{display:flex; align-items:center; gap:10px;}
+  .wizard-title-label{font-size:.72rem; font-weight:600; color:var(--paper-dim); flex:none;}
+  .script-title-input{flex:1; min-width:0; background:rgba(255,255,255,0.04); border:1px solid var(--hairline);
+    border-radius:10px; padding:8px 12px; font-size:.9rem; font-weight:600; color:var(--paper);
+    font-family:"Fraunces"; transition:border-color .15s ease;}
+  .script-title-input:focus{outline:none; border-color:color-mix(in srgb, var(--brass) 55%, var(--hairline));}
+
+  .wizard-source{align-self:flex-start; font-size:.7rem; font-weight:700; color:var(--brass);
+    background:color-mix(in srgb, var(--brass) 12%, transparent); border:1px solid color-mix(in srgb, var(--brass) 35%, transparent);
+    border-radius:20px; padding:3px 10px;}
+
+  .wizard-loading{display:flex; gap:5px; padding:4px 0;}
+  .wizard-loading span{width:6px; height:6px; border-radius:50%; background:var(--brass);
+    animation:wizardBounce 1s ease-in-out infinite;}
+  .wizard-loading span:nth-child(2){animation-delay:.15s;}
+  .wizard-loading span:nth-child(3){animation-delay:.3s;}
+  @keyframes wizardBounce{0%,80%,100%{transform:scale(.6); opacity:.4;} 40%{transform:scale(1); opacity:1;}}
+
+  .premise-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .premise-card{text-align:left; background:rgba(255,255,255,0.03); border:1px solid var(--hairline);
+    border-radius:12px; padding:12px; cursor:pointer; display:flex; flex-direction:column; gap:6px;
+    transition:border-color .15s ease, transform .15s ease; font-family:"Inter";}
+  .premise-card:hover{border-color:var(--brass); transform:translateY(-2px);}
+  .premise-title{font-size:.84rem; font-weight:700; font-family:"Fraunces"; color:var(--paper);}
+  .premise-blurb{font-size:.76rem; color:var(--paper-dim); line-height:1.4;}
+
+  .script-output{background:var(--ink-950); border:1px solid var(--hairline); border-radius:12px;
+    padding:20px 18px; font-family:"Courier New", monospace; font-size:.82rem; line-height:1.65; color:var(--paper);
+    margin:0; animation:scriptFadeIn .4s ease both; cursor:text;}
+  .script-output:focus{outline:none; border-color:color-mix(in srgb, var(--brass) 50%, var(--hairline));}
+  @keyframes scriptFadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);}}
+
+  .script-line{margin:0 0 14px;}
+  .script-line.transition{font-weight:700; letter-spacing:.5px;}
+  .script-line.heading{font-weight:700; letter-spacing:.5px; text-align:center; margin-top:4px;}
+  .script-line.action{color:var(--paper); opacity:.92;}
+  .script-line.character{text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+    margin-bottom:2px; color:var(--brass);}
+  .script-line.paren{text-align:center; font-style:italic; opacity:.7; font-size:.76rem; margin-bottom:2px;}
+  .script-line.dialogue{text-align:center; max-width:78%; margin:0 auto 14px;}
+
+  .script-meta{display:flex; align-items:center; justify-content:space-between; margin-top:8px;
+    font-size:.74rem; color:var(--paper-dim);}
+  .script-copy-btn{display:flex; align-items:center; gap:6px; background:none; border:1px solid var(--hairline);
+    color:var(--paper-dim); font-size:.76rem; font-weight:600; padding:6px 12px; border-radius:20px; cursor:pointer;
+    font-family:"Inter"; transition:border-color .15s ease, color .15s ease;}
+  .script-copy-btn svg{width:13px; height:13px; stroke:currentColor; fill:none; stroke-width:1.8;}
+  .script-copy-btn:hover{border-color:var(--hairline-strong); color:var(--paper);}
+  .script-copy-btn.copied{border-color:var(--brass); color:var(--brass);}
+
+  .proj-sub{font-size:.7rem; color:var(--paper-dim); margin-bottom:5px;}
+
+  .wizard-actions{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+
+  .dialogue-choice{display:flex; flex-direction:column; gap:10px;}
+  .dialogue-option{display:flex; flex-direction:column; gap:4px; text-align:left; padding:14px 16px;
+    border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid var(--hairline); cursor:pointer;
+    transition:border-color .15s ease, transform .15s ease; font-family:"Inter";}
+  .dialogue-option:hover{border-color:var(--brass); transform:translateY(-2px);}
+  .dopt-title{font-size:.86rem; font-weight:700; color:var(--paper); font-family:"Fraunces";}
+  .dopt-sub{font-size:.76rem; color:var(--paper-dim);}
+
+  .cast-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:9px;}
+  .cast-option{display:flex; flex-direction:column; align-items:center; gap:7px; padding:12px 6px;
+    border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid var(--hairline); cursor:pointer;
+    transition:border-color .15s ease, transform .15s ease; font-family:"Inter";}
+  .cast-option:hover{border-color:var(--brass); transform:translateY(-2px);}
+  .cast-avatar{width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:1.1rem; border:1px solid var(--hairline-strong);}
+  .cast-name{font-size:.74rem; font-weight:600; color:var(--paper);}
+  .wizard-tag.cast-tag{color:var(--brass); border-color:color-mix(in srgb, var(--brass) 45%, transparent);}
+  @media (max-width: 420px){ .cast-grid{grid-template-columns:repeat(2, 1fr);} }
+
+  .wizard-outline-btn{background:transparent; border:1px solid var(--hairline-strong); color:var(--paper);
+    font-weight:600; font-size:.9rem; padding:12px 20px; border-radius:12px; cursor:pointer; font-family:"Inter";
+    display:flex; align-items:center; gap:7px; transition:border-color .15s ease, color .15s ease;}
+  .wizard-outline-btn:hover{border-color:var(--brass); color:var(--brass);}
+
+  .wizard-crosslink{margin-top:6px; padding-top:14px; border-top:1px dashed var(--hairline); display:flex;
+    flex-direction:column; gap:8px;}
+  .wizard-crosslink-label{font-size:.74rem; font-weight:600; color:var(--paper-dim);}
+
+  .proj-item.proj-new{border-radius:12px; animation:projPulse 1.3s ease-in-out 2;}
+  @keyframes projPulse{
+    0%,100%{box-shadow:0 0 0 0 transparent; background:transparent;}
+    50%{box-shadow:0 0 0 1px color-mix(in srgb, var(--brass) 60%, transparent); background:color-mix(in srgb, var(--brass) 8%, transparent);}
+  }
+
+  @media (max-width: 500px){
+    .premise-grid{grid-template-columns:1fr;}
+  }
+
+  .toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); z-index:50;
+    background:var(--ink-800); border:1px solid var(--hairline-strong); color:var(--paper); font-size:.84rem;
+    padding:12px 20px; border-radius:12px; opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+    box-shadow:0 14px 34px -12px rgba(0,0,0,0.5); display:flex; align-items:center; gap:8px; white-space:nowrap;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+  .toast svg{width:15px; height:15px; stroke:var(--brass); fill:none; stroke-width:2; flex:none;}
+
+
+  section.block{margin:52px 0;}
+  .block-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px;}
+  .block-head h2{margin:0; font-size:1.35rem; font-weight:500;}
+  .block-head .count{color:var(--paper-dim); font-size:.82rem; font-weight:400; margin-left:8px; font-family:"Inter";}
+  .view-all{font-size:.82rem; color:var(--paper-dim); font-weight:500; border-bottom:1px solid transparent;}
+  .view-all:hover{color:var(--brass); border-color:var(--brass);}
+
+  .hscroll{display:flex; gap:16px; overflow-x:auto; padding:4px 4px 14px; scroll-snap-type:x proximity;}
+  .card{flex:none; width:214px; border-radius:16px; overflow:hidden; scroll-snap-align:start; cursor:pointer;
+    border:1px solid var(--hairline); background:var(--ink-900); transition:border-color .2s ease, transform .2s ease;}
+  .card:hover{border-color:var(--hairline-strong); transform:translateY(-3px);
+    box-shadow:0 18px 38px -16px color-mix(in srgb, var(--glow, var(--brass)) 60%, transparent);}
+  .card:hover .scene{transform:scale(1.06);}
+  .card .thumb{height:132px; position:relative; overflow:hidden; display:flex; align-items:flex-end; padding:10px;}
+  .card .thumb::before{content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
+    background:linear-gradient(180deg, rgba(255,255,255,.14), transparent 45%);}
+  .card .thumb::after{content:""; position:absolute; inset:-25%; z-index:0; pointer-events:none;
+    background:radial-gradient(circle at 22% 88%, var(--glow, transparent), transparent 46%);
+    opacity:.28; filter:blur(18px); mix-blend-mode:screen;}
+  .card .thumb .scene{position:absolute; inset:0; z-index:1; width:100%; height:100%; display:block; transition:transform .35s ease;}
+  .scene-fg{fill:rgba(0,0,0,.55); stroke:var(--glow, transparent); stroke-width:1; stroke-opacity:.4; paint-order:stroke fill;}
+  .scene-fg2{fill:rgba(0,0,0,.35); stroke:var(--glow, transparent); stroke-width:.7; stroke-opacity:.25; paint-order:stroke fill;}
+  .scene-glow{fill:var(--glow, var(--paper)); opacity:.9; animation:pulseSoft 3.2s ease-in-out infinite;
+    transform-box:fill-box; transform-origin:center;
+    filter:drop-shadow(0 0 6px var(--glow, transparent)) drop-shadow(0 0 14px var(--glow, transparent));}
+  .tw{fill:#fff; opacity:.6; animation:twinkleDot 3s ease-in-out infinite;}
+  .scene-drift{animation:floatUp 2.6s ease-in-out infinite; transform-box:fill-box;}
+  .scene-fall{animation:fallDot 1.8s linear infinite; transform-box:fill-box;}
+  .scene-drip{animation:dripFall 2.1s ease-in infinite; transform-box:fill-box;}
+  .scene-wave{animation:waveShimmer 3s ease-in-out infinite;}
+  @keyframes pulseSoft{0%,100%{opacity:.82; transform:scale(1);} 50%{opacity:1; transform:scale(1.12);}}
+  @keyframes twinkleDot{0%,100%{opacity:.25;} 50%{opacity:.95;}}
+  @keyframes floatUp{0%{transform:translateY(6px); opacity:.15;} 50%{opacity:.9;} 100%{transform:translateY(-9px); opacity:0;}}
+  @keyframes fallDot{0%{transform:translateY(0); opacity:0;} 12%{opacity:1;} 82%{opacity:1;} 100%{transform:translateY(34px); opacity:0;}}
+  @keyframes dripFall{0%{transform:translateY(0); opacity:0;} 15%{opacity:1;} 80%{opacity:.8;} 100%{transform:translateY(16px); opacity:0;}}
+  @keyframes waveShimmer{0%,100%{opacity:.4;} 50%{opacity:.75;}}
+  .card .thumb .scrim{position:absolute; inset:0; z-index:1;
+    background:linear-gradient(180deg, transparent 34%, rgba(0,0,0,0.62) 100%);}
+  .card .thumb .plays{position:absolute; bottom:10px; right:10px; z-index:2; font-size:.7rem; font-weight:600;
+    color:#fff; background:rgba(0,0,0,0.45); padding:3px 8px; border-radius:20px; display:flex; align-items:center; gap:4px;}
+  .card .thumb .plays svg{width:10px; height:10px; fill:#fff; stroke:none;}
+  .card .meta{padding:12px 13px 14px;}
+  .card .meta .t{font-size:.88rem; font-weight:600; line-height:1.3; margin-bottom:3px;}
+  .card .meta .s{font-size:.74rem; color:var(--paper-dim);}
+
+  .tone-a{background:linear-gradient(160deg, color-mix(in srgb, var(--brass) 26%, var(--ink-950)), var(--ink-950));}
+  .tone-b{background:linear-gradient(160deg, color-mix(in srgb, var(--emerald) 26%, var(--ink-950)), var(--ink-950));}
+  .tone-c{background:linear-gradient(160deg, color-mix(in srgb, var(--wine) 26%, var(--ink-950)), var(--ink-950));}
+
+  .story-card .thumb{height:118px; padding:12px; display:flex; flex-direction:column; justify-content:flex-end;}
+  .story-card .title{position:relative; z-index:2; font-size:.9rem; font-weight:600; line-height:1.3; font-family:"Fraunces"; color:#fff;}
+  .rating{position:relative; z-index:1; display:flex; align-items:center; gap:4px; font-size:.72rem; font-weight:600; color:var(--brass);}
+  .rating svg{width:11px; height:11px; fill:var(--brass); stroke:none;}
+
+  .characters-row{display:flex; gap:28px; overflow-x:auto; padding:6px 4px 10px;}
+  .char{flex:none; width:70px; text-align:center;}
+  .char .avatar{width:58px; height:58px; border-radius:50%; margin:0 auto 8px; display:flex; align-items:center; justify-content:center;
+    font-size:1.4rem; border:1px solid var(--hairline-strong);}
+  .char .name{font-size:.72rem; color:var(--paper-dim);}
+
+  .pull-quote{margin:56px 0; padding:30px 8px; border-top:1px solid var(--hairline); border-bottom:1px solid var(--hairline); text-align:center;}
+  .pull-quote p{margin:0; font-family:"Fraunces"; font-style:italic; font-weight:500; font-size:1.35rem; line-height:1.5; color:var(--paper);}
+  .pull-quote p em{color:var(--brass); font-style:italic;}
+
+  .footer-grid{display:grid; grid-template-columns:1.1fr 1fr; gap:20px;}
+  .panel{background:var(--ink-900); border:1px solid var(--hairline); border-radius:18px; padding:22px;}
+  .panel h3{margin:0 0 16px; font-size:1.02rem; font-weight:600; font-family:"Fraunces"; display:flex; justify-content:space-between; align-items:baseline;}
+
+  .proj-list{display:flex; flex-direction:column; gap:16px;}
+  .proj-item{display:flex; gap:12px; align-items:center; padding:5px 6px; margin:-5px -6px; border-radius:12px;}
+  .proj-thumb{width:44px; height:44px; border-radius:10px; flex:none; display:flex; align-items:center; justify-content:center; font-size:1.05rem;}
+  .proj-info{flex:1; min-width:0;}
+  .proj-info .name{font-size:.86rem; font-weight:600; margin-bottom:6px;}
+  .bar-track{height:3px; border-radius:3px; background:rgba(255,255,255,0.08); overflow:hidden; flex:1;}
+  .bar-fill{height:100%; background:var(--brass);}
+  .proj-row-flex{display:flex; align-items:center; gap:8px;}
+  .pct{font-size:.72rem; color:var(--paper-dim); white-space:nowrap;}
+
+  .tool-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  .tool-tile{border-radius:12px; padding:16px 8px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:9px;
+    font-size:.76rem; font-weight:600; cursor:pointer; border:1px solid var(--hairline); background:rgba(255,255,255,0.02);
+    transition:border-color .18s ease, transform .18s ease;}
+  .tool-tile:hover{border-color:var(--hairline-strong); transform:translateY(-2px);}
+  .tool-tile svg{width:19px; height:19px; stroke:currentColor; fill:none; stroke-width:1.6;}
+
+  footer.credit{text-align:center; margin-top:50px; font-size:.76rem; color:var(--paper-dim);}
+
+  @media (max-width: 980px){ .footer-grid{grid-template-columns:1fr;} }
+  @media (max-width: 860px){
+    .rail{position:fixed; top:0; left:0; height:100%; width:230px; z-index:30; padding:76px 16px 20px;
+      align-items:stretch; transform:translateX(-100%); transition:transform .25s ease; background:var(--ink-900);}
+    .rail-nav{margin-top:0;}
+    .rail-item{width:100%; justify-content:flex-start; gap:12px; padding:0 10px;}
+    .rail-item .tip{display:none;}
+    .rail-item span.label{display:inline; font-size:.86rem;}
+    .rail-bottom{margin-top:auto; align-items:flex-start; width:100%;}
+    body.nav-open .rail{transform:translateX(0);}
+    body.nav-open .drawer-backdrop{display:block; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:25;}
+    .topline{display:flex; position:sticky; top:0; z-index:20; align-items:center; gap:12px;
+      padding:14px 16px; background:color-mix(in srgb, var(--ink-950) 90%, transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--hairline);}
+    .hamburger{display:flex; width:38px; height:38px; border-radius:10px; border:1px solid var(--hairline);
+      background:rgba(255,255,255,0.04); align-items:center; justify-content:center; cursor:pointer; flex:none; color:var(--paper);}
+    .hamburger svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:1.7;}
+    .topline .brand{font-family:"Fraunces"; font-weight:600; font-size:1.05rem;}
+    .main{padding:18px 16px 40px;}
+    .hero h1{font-size:2.1rem;}
+    .quick-panel{padding:14px;}
+    .quick-row{flex-wrap:wrap;}
+    .quick-input{flex:1 1 100%; order:1; padding:8px 0;}
+    .quick-actions{order:2; flex:1; justify-content:space-between;}
+    .generate-btn{flex:1; justify-content:center;}
+    .settings-inner{gap:16px;}
+    .search-pill span{display:none;}
+    .theme-switch .tlabel{display:none;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;}
+    .scene-glow,.tw,.scene-drift,.scene-fall,.scene-drip,.scene-wave,.wizard-loading span,.script-output{animation:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="texture">
+  <div class="vignette"></div>
+  <div class="glow"></div>
+  <div class="glow2"></div>
+  <svg class="grain" width="100%" height="100%">
+    <filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter>
+    <rect width="100%" height="100%" filter="url(#n)"/>
+  </svg>
+</div>
+<div class="drawer-backdrop" onclick="document.body.classList.remove('nav-open')"></div>
+
+<div class="topline">
+  <button class="hamburger" onclick="document.body.classList.toggle('nav-open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+  <span class="brand">Ridea</span>
+</div>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-mark">R</div>
+    <nav class="rail-nav" id="railNav"></nav>
+    <div class="rail-bottom"><div class="rail-avatar">A</div></div>
+  </aside>
+
+  <main class="main">
+    <div class="wrap">
+
+      <div class="utility">
+        <div class="search-pill">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>Search projects, characters, ideas…</span>
+        </div>
+
+        <div class="theme-switch" id="themeSwitch">
+          <span class="tlabel">Theme</span>
+          <button class="swatch sw-brass active" data-theme="brass" title="Brass"></button>
+          <button class="swatch sw-teal" data-theme="teal" title="Teal Tide"></button>
+          <button class="swatch sw-northstar" data-theme="northstar" title="Northstar"></button>
+        </div>
+
+        <div class="credits-pill">◆ 12,450 credits</div>
+        <div class="util-icon">
+          <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="util-avatar"></div>
+      </div>
+
+      <div class="hero">
+        <h1>Good morning, Arghya.<br><em>What shall we make today?</em></h1>
+        <p>Trends are moving fast this week — pull one into a project, or start from a blank page.</p>
+
+        <div class="quick-panel">
+          <div class="type-tabs" id="typeTabs">
+            <button class="type-tab" data-type="image">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Image
+            </button>
+            <button class="type-tab" data-type="voice">
+              <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+              Voice
+            </button>
+            <button class="type-tab" data-type="script">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+              Script
+            </button>
+            <button class="type-tab" data-type="video">
+              <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+              Video
+            </button>
+          </div>
+
+          <div class="quick-row">
+            <input class="quick-input" id="quickInput" type="text" placeholder="Describe an idea, a character, a scene…">
+            <div class="quick-actions">
+              <div class="ghost-btn attach-wrap" id="attachBtn" title="Attach reference">
+                <svg viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.2-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48"/></svg>
+                <div class="attach-popover" id="attachPopover">
+                  <div class="popover-label">Add a reference</div>
+                  <button type="button" class="attach-popover-item" data-name="concept-sketch.png" data-size="2.4 MB" data-kind="image">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    concept-sketch.png
+                  </button>
+                  <button type="button" class="attach-popover-item" data-name="story-outline.docx" data-size="180 KB" data-kind="doc">
+                    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    story-outline.docx
+                  </button>
+                  <button type="button" class="attach-popover-item" data-name="voice-sample.mp3" data-size="1.1 MB" data-kind="voice">
+                    <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>
+                    voice-sample.mp3
+                  </button>
+                  <button type="button" class="attach-popover-item" data-name="reference-clip.mp4" data-size="8.7 MB" data-kind="video">
+                    <svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                    reference-clip.mp4
+                  </button>
+                </div>
+              </div>
+              <div class="ghost-btn" title="Options">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg>
+              </div>
+              <button class="generate-btn" id="generateBtn">
+                <span class="gen-label">Generate</span>
+                <svg class="gen-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="file-chips" id="fileChips"></div>
+
+          <div class="settings-panel" id="settingsPanel">
+            <div class="settings-inner" id="settingsInner"></div>
+          </div>
+
+          <div class="script-wizard" id="scriptWizard"></div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast">
+        <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        <span id="toastMsg"></span>
+      </div>
+
+      <section class="block">
+        <div class="block-head"><h2>Viral trends<span class="count">this week</span></h2><a class="view-all" href="#">View all</a></div>
+        <div class="hscroll" id="trends"></div>
+      </section>
+
+      <section class="block">
+        <div class="block-head"><h2>Story opportunities</h2><a class="view-all" href="#">View all</a></div>
+        <div class="hscroll" id="stories"></div>
+      </section>
+
+      <section class="block">
+        <div class="block-head"><h2>Characters passing by</h2><a class="view-all" href="#">View all</a></div>
+        <div class="characters-row" id="characters"></div>
+      </section>
+
+      <div class="pull-quote">
+        <p>Every great creation begins with a simple idea.<br>Let's make it <em>extraordinary.</em></p>
+      </div>
+
+      <div class="footer-grid">
+        <div class="panel">
+          <h3>Continue creating <a class="view-all" href="#">View all</a></h3>
+          <div class="proj-list" id="projList"></div>
+        </div>
+        <div class="panel">
+          <h3>Start something new</h3>
+          <div class="tool-grid" id="toolGrid"></div>
+        </div>
+      </div>
+
+      <footer class="credit">Ridea — an AI creative partner, reimagined.</footer>
+    </div>
+  </main>
+</div>
+
+<script>
+  const navIcons = [
+    {label:"Home", active:true, svg:'<path d="M3 11l9-8 9 8"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>'},
+    {label:"Create", svg:'<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>'},
+    {label:"Inspiration", svg:'<path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z"/>'},
+    {label:"Projects", svg:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>'},
+    {label:"Characters", svg:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><circle cx="17" cy="8" r="2.4"/><path d="M15.5 12.3A4.6 4.6 0 0 1 21 16.5"/>'},
+    {label:"Voice studio", svg:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/>'},
+    {label:"Assistant", svg:'<rect x="4" y="7" width="16" height="13" rx="2"/><circle cx="9" cy="13" r="1.2"/><circle cx="15" cy="13" r="1.2"/><path d="M12 7V4"/><circle cx="12" cy="3" r="1"/>'},
+    {label:"Trend intel", svg:'<polyline points="3 17 9.5 10.5 14 15 21 7"/><polyline points="15 7 21 7 21 13"/>'}
+  ];
+  document.getElementById('railNav').innerHTML = navIcons.map(n=>`
+    <div class="rail-item ${n.active?'active':''}">
+      <svg viewBox="0 0 24 24">${n.svg}</svg>
+      <span class="label" style="display:none;">${n.label}</span>
+      <span class="tip">${n.label}</span>
+    </div>`).join('');
+  const mq = window.matchMedia('(max-width:860px)');
+  function syncLabels(){document.querySelectorAll('.rail-item .label').forEach(el=>{el.style.display = mq.matches ? 'inline' : 'none';});}
+  syncLabels(); mq.addEventListener('change', syncLabels);
+
+  // ---- scene illustrations: vivid poster-style skies with dark silhouettes + living detail ----
+  const scenes = {
+    pets: {bg:"linear-gradient(160deg,#3a1f52 0%,#b3552e 62%,#e8a33c 100%)", glow:"#ffe9b0", art:`
+      <circle class="scene-glow" cx="168" cy="26" r="10"/>
+      <path class="scene-fg" d="M55 130 Q50 92 70 86 L64 58 L82 78 L100 52 L110 80 Q130 86 126 112 Q124 130 102 128 Q78 133 55 130 Z"/>`},
+    cinematic: {bg:"linear-gradient(160deg,#120a30 0%,#3a1f6b 55%,#7a2f8a 100%)", glow:"#7dfaff", art:`
+      <circle class="scene-glow" cx="34" cy="24" r="12" opacity=".55"/>
+      <g class="scene-fg">
+        <rect x="14" y="72" width="16" height="58"/><rect x="34" y="52" width="13" height="78"/>
+        <rect x="51" y="86" width="18" height="44"/><rect x="73" y="36" width="15" height="94"/>
+        <rect x="92" y="64" width="16" height="66"/><rect x="112" y="46" width="13" height="84"/>
+        <rect x="129" y="76" width="18" height="54"/><rect x="151" y="58" width="14" height="72"/>
+      </g>`},
+    adventures: {bg:"linear-gradient(160deg,#4a1220 0%,#c2472e 55%,#f0a83a 100%)", glow:"#ffd27a", art:`
+      <circle class="scene-glow" cx="100" cy="28" r="17"/>
+      <polygon class="scene-fg2" points="0,130 45,60 78,96 0,130"/>
+      <polygon class="scene-fg" points="55,130 105,48 150,130"/>
+      <polygon class="scene-fg2" points="120,130 160,75 200,130"/>`},
+    fantasy: {bg:"linear-gradient(160deg,#0f1a3a 0%,#3a2a6b 55%,#7a4fae 100%)", glow:"#cdeaff", art:`
+      <circle class="scene-glow" cx="158" cy="22" r="9" opacity=".65"/>
+      <g class="scene-fg">
+        <rect x="66" y="66" width="64" height="64"/>
+        <rect x="48" y="88" width="20" height="42"/><polygon points="48,88 58,68 68,88"/>
+        <rect x="128" y="88" width="20" height="42"/><polygon points="128,88 138,68 148,88"/>
+        <rect x="88" y="50" width="18" height="80"/><polygon points="88,50 97,30 106,50"/>
+      </g>
+      <circle class="tw" cx="78" cy="96" r="1.6" style="animation-delay:.4s"/>
+      <circle class="tw" cx="118" cy="100" r="1.6" style="animation-delay:1.3s"/>`},
+    emotional: {bg:"linear-gradient(160deg,#3a0f14 0%,#8a2a1f 55%,#e07a2e 100%)", glow:"#ffb066", art:`
+      <circle class="scene-glow" cx="100" cy="70" r="40" opacity=".28"/>
+      <line x1="100" y1="14" x2="100" y2="36" stroke="rgba(0,0,0,.5)" stroke-width="2"/>
+      <g class="scene-fg">
+        <rect x="90" y="34" width="20" height="10" rx="3"/>
+        <ellipse cx="100" cy="76" rx="32" ry="38"/>
+        <rect x="90" y="108" width="20" height="12" rx="3"/>
+      </g>`},
+    future: {bg:"linear-gradient(160deg,#04141a 0%,#0f5a6b 55%,#3ad6c9 100%)", glow:"#7dfff0", art:`
+      <circle class="scene-glow" cx="150" cy="24" r="8" opacity=".6"/>
+      <g class="scene-fg">
+        <rect x="62" y="48" width="76" height="64" rx="16"/>
+        <circle cx="100" cy="32" r="6"/>
+        <rect x="97" y="38" width="6" height="10"/>
+      </g>
+      <circle fill="var(--glow)" class="scene-glow" cx="83" cy="80" r="7" style="animation-delay:.3s"/>
+      <circle fill="var(--glow)" class="scene-glow" cx="117" cy="80" r="7" style="animation-delay:.7s"/>`},
+    starchild: {bg:"linear-gradient(160deg,#05061a 0%,#241a5e 55%,#5a3aa0 100%)", glow:"#ffe27a", art:`
+      <polygon class="scene-glow" points="140,14 146,30 163,30 149,40 154,57 140,47 126,57 131,40 117,30 134,30"/>
+      <g class="scene-fg">
+        <circle cx="80" cy="62" r="15"/>
+        <polygon points="58,130 102,130 92,84 68,84"/>
+        <line x1="94" y1="86" x2="124" y2="46" stroke="rgba(0,0,0,.5)" stroke-width="6" stroke-linecap="round"/>
+      </g>`},
+    robodream: {bg:"linear-gradient(160deg,#14163a 0%,#3a3a6b 55%,#8a7ac9 100%)", glow:"#d8d4ff", art:`
+      <path class="scene-glow" d="M158 22a20 20 0 1 0 0 40 16 16 0 1 1 0-40z"/>
+      <g class="scene-drift"><text x="112" y="50" font-size="15" fill="var(--glow)" opacity=".8" font-family="Fraunces">z z z</text></g>
+      <g class="scene-fg">
+        <rect x="45" y="96" width="66" height="30" rx="9"/>
+        <circle cx="40" cy="111" r="13"/>
+        <rect x="33" y="105" width="6" height="5"/>
+      </g>`},
+    moonvalley: {bg:"linear-gradient(160deg,#071426 0%,#16406b 55%,#4aa0c9 100%)", glow:"#eaf6ff", art:`
+      <path class="scene-glow" d="M150 22a22 22 0 1 0 0 44 17 17 0 1 1 0-44z"/>
+      <path class="scene-fg" d="M0 130 Q40 82 92 108 Q135 88 200 118 L200 130 Z"/>
+      <path class="scene-fg2" d="M0 130 L0 118 Q60 100 130 122 Q170 108 200 122 L200 130 Z"/>`},
+    ocean: {bg:"linear-gradient(160deg,#021a1e 0%,#0f5a5e 55%,#2fd0c2 100%)", glow:"#bff5ec", art:`
+      <circle class="scene-glow" cx="150" cy="26" r="9" opacity=".55"/>
+      <path class="scene-fg" d="M36 92 Q26 70 52 65 Q92 54 134 76 Q156 82 150 98 Q144 110 116 104 L100 118 L104 104 Q66 110 44 102 Q36 100 36 92 Z"/>
+      <path class="scene-wave" d="M0 120 Q18 112 36 120 T72 120 T108 120 T144 120 T180 120" stroke="var(--glow)" stroke-width="2" fill="none"/>`},
+    hourglass: {bg:"linear-gradient(160deg,#2a0f14 0%,#8a4a1f 55%,#e0a33c 100%)", glow:"#ffd27a", art:`
+      <circle class="scene-glow" cx="100" cy="70" r="34" opacity=".22"/>
+      <g class="scene-fg">
+        <rect x="70" y="24" width="60" height="9" rx="3"/>
+        <rect x="70" y="97" width="60" height="9" rx="3"/>
+        <path d="M78 33 H122 L100 68 Z"/>
+        <path d="M78 106 H122 L100 71 Z"/>
+      </g>
+      <circle class="scene-fall" fill="var(--glow)" cx="100" cy="66" r="2.4"/>`},
+    painter: {bg:"linear-gradient(160deg,#2a1a4a 0%,#a05a9e 55%,#f2b6c9 100%)", glow:"#ffffff", art:`
+      <g class="scene-fg">
+        <circle cx="56" cy="58" r="22"/><circle cx="88" cy="46" r="28"/><circle cx="124" cy="60" r="21"/>
+        <rect x="36" y="58" width="106" height="20" rx="10"/>
+      </g>
+      <line x1="146" y1="92" x2="176" y2="122" stroke="var(--glow)" stroke-width="6" stroke-linecap="round" opacity=".75"/>
+      <circle class="scene-drip" fill="#ffd166" cx="176" cy="122" r="4"/>`}
+  };
+  const sceneSvg = key => {
+    const sc = scenes[key];
+    return `<svg class="scene" style="--glow:${sc.glow}" viewBox="0 0 200 130" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
+      ${sc.art}
+      <circle class="tw" cx="20" cy="16" r="1.5" style="animation-delay:.2s"/>
+      <circle class="tw" cx="182" cy="40" r="1.3" style="animation-delay:1.4s"/>
+    </svg>`;
+  };
+
+  const trends = [
+    {scene:"pets", plays:"1.2M", title:"Magical Pets", sub:"Creature · Whimsical", tone:"tone-b"},
+    {scene:"cinematic", plays:"980K", title:"AI Cinematic", sub:"Film · Noir", tone:"tone-c"},
+    {scene:"adventures", plays:"1.6M", title:"Epic Adventures", sub:"Fantasy · Quest", tone:"tone-a"},
+    {scene:"fantasy", plays:"1.1M", title:"Fantasy Worlds", sub:"Worldbuild", tone:"tone-b"},
+    {scene:"emotional", plays:"1.3M", title:"Emotional Stories", sub:"Drama", tone:"tone-c"},
+    {scene:"future", plays:"870K", title:"Future Visions", sub:"Sci-fi", tone:"tone-a"}
+  ];
+  document.getElementById('trends').innerHTML = trends.map(t=>`
+    <div class="card" style="--glow:${scenes[t.scene].glow}" data-topic="${t.title}">
+      <div class="thumb" style="background:${scenes[t.scene].bg}">
+        ${sceneSvg(t.scene)}
+        <div class="scrim"></div>
+        <span class="plays"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>${t.plays}</span>
+      </div>
+      <div class="meta"><div class="t">${t.title}</div><div class="s">${t.sub}</div></div>
+    </div>`).join('');
+  document.getElementById('trends').addEventListener('click', e => {
+    const card = e.target.closest('.card');
+    if(card) goScriptFromTopic(card.dataset.topic, 'Viral Trends');
+  });
+
+  const stories = [
+    {scene:"starchild", stars:"4.8K", title:"The Lost Star Child", tone:"tone-a"},
+    {scene:"robodream", stars:"3.2K", title:"Robot's First Dream", tone:"tone-b"},
+    {scene:"moonvalley", stars:"3.7K", title:"Moonlight Valley Secret", tone:"tone-c"},
+    {scene:"ocean", stars:"2.9K", title:"Whispers of the Ocean", tone:"tone-b"},
+    {scene:"hourglass", stars:"2.4K", title:"Timekeeper's Daughter", tone:"tone-a"},
+    {scene:"painter", stars:"2.4K", title:"Little Cloud Painter", tone:"tone-c"}
+  ];
+  document.getElementById('stories').innerHTML = stories.map(s=>`
+    <div class="card story-card" style="--glow:${scenes[s.scene].glow}" data-topic="${s.title}">
+      <div class="thumb" style="background:${scenes[s.scene].bg}">
+        ${sceneSvg(s.scene)}
+        <div class="scrim"></div>
+        <div class="title">${s.title}</div>
+      </div>
+      <div class="meta"><div class="rating"><svg viewBox="0 0 24 24"><polygon points="12 2 15 9 22 9.5 16.5 14 18 21 12 17.3 6 21 7.5 14 2 9.5 9 9"/></svg>${s.stars}</div></div>
+    </div>`).join('');
+  document.getElementById('stories').addEventListener('click', e => {
+    const card = e.target.closest('.card');
+    if(card) goScriptFromTopic(card.dataset.topic, 'Story Opportunities');
+  });
+
+  const characters = [
+    {icon:"🤖", name:"Robo", tone:"tone-b", voice:"flat delivery, quietly curious"},
+    {icon:"🐕", name:"Corgi", tone:"tone-a", voice:"delighted, barking the words"},
+    {icon:"🧑", name:"Explorer", tone:"tone-b", voice:"breathless, already amazed"},
+    {icon:"🧕", name:"Red Cloak", tone:"tone-c", voice:"sharp, no-nonsense"},
+    {icon:"🐉", name:"Sky Dragon", tone:"tone-b", voice:"booming, a little theatrical"},
+    {icon:"🧙", name:"Wizard", tone:"tone-c", voice:"cryptic, quietly amused"}
+  ];
+  document.getElementById('characters').innerHTML = characters.map(c=>`
+    <div class="char">
+      <div class="avatar ${c.tone}">${c.icon}</div>
+      <div class="name">${c.name}</div>
+    </div>`).join('');
+
+  const projects = [
+    {icon:"🌲", name:"Mystical Forest Adventure", pct:60, tone:"tone-b"},
+    {icon:"🎬", name:"AI Movie Scene", pct:70, tone:"tone-a"},
+    {icon:"🎵", name:"Voice Narration Project", pct:30, tone:"tone-c"},
+    {icon:"🏰", name:"Fantasy World Building", pct:45, tone:"tone-b"}
+  ];
+  function renderProjects(highlightFirst){
+    document.getElementById('projList').innerHTML = projects.map((p,i)=>`
+      <div class="proj-item ${highlightFirst && i===0 ? 'proj-new' : ''}">
+        <div class="proj-thumb ${p.tone}">${p.icon}</div>
+        <div class="proj-info">
+          <div class="name">${p.name}</div>
+          ${p.sub ? `<div class="proj-sub">${p.sub}</div>` : ''}
+          <div class="proj-row-flex">
+            <div class="bar-track"><div class="bar-fill" style="width:${p.pct}%;"></div></div>
+            <span class="pct">${p.pct}%</span>
+          </div>
+        </div>
+      </div>`).join('');
+    if(highlightFirst){
+      const first = document.querySelector('#projList .proj-item');
+      if(first) setTimeout(() => first.classList.remove('proj-new'), 2600);
+    }
+  }
+  renderProjects();
+
+  const tools = [
+    {label:"Video", svg:'<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>'},
+    {label:"Image", svg:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'},
+    {label:"Script", svg:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>'},
+    {label:"Voice", svg:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/>'},
+    {label:"Story", svg:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'},
+    {label:"Edit", svg:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>'}
+  ];
+  document.getElementById('toolGrid').innerHTML = tools.map(t=>`
+    <div class="tool-tile"><svg viewBox="0 0 24 24">${t.svg}</svg>${t.label}</div>`).join('');
+
+  // ---- theme switching ----
+  const STORAGE_KEY = 'ridea-theme-v1';
+  const swatches = document.querySelectorAll('.swatch');
+  function applyTheme(name){
+    document.documentElement.setAttribute('data-theme', name);
+    swatches.forEach(s => s.classList.toggle('active', s.dataset.theme === name));
+    try{ localStorage.setItem(STORAGE_KEY, name); }catch(e){}
+  }
+  swatches.forEach(s => s.addEventListener('click', () => applyTheme(s.dataset.theme)));
+  let savedTheme = null;
+  try{ savedTheme = localStorage.getItem(STORAGE_KEY); }catch(e){}
+  applyTheme(savedTheme || 'brass');
+
+  // ---- quick creation: content type, settings, attachments, generate ----
+  const settingsConfig = {
+    image: {
+      placeholder: "Describe the image you want to create…",
+      groups: [
+        {label:"Aspect ratio", key:"ar", ratioChips:true, options:[
+          {value:"1:1", sub:"Square · Instagram post"},
+          {value:"4:5", sub:"Portrait · Feed"},
+          {value:"9:16", sub:"Story · Reel cover"},
+          {value:"16:9", sub:"Landscape · Banner"},
+          {value:"3:4", sub:"Portrait · Print"}
+        ], value:"1:1"},
+        {label:"Variations", key:"count", options:["1","2","4"], value:"4"},
+        {label:"Style", key:"style", options:["Cinematic","Illustrated","Realistic","3D"], value:"Illustrated"}
+      ]
+    },
+    voice: {
+      placeholder: "Describe the voice line or narration…",
+      groups: [
+        {label:"Voice", key:"voice", options:["Warm narrator","Bright & playful","Deep cinematic","Character voice"], value:"Warm narrator"},
+        {label:"Length", key:"len", options:["15s","30s","1 min","2 min"], value:"30s"}
+      ]
+    },
+    script: {
+      placeholder: "Describe the story, scene or premise…",
+      groups: [
+        {label:"Length", key:"len", options:["Short","Medium","Long"], value:"Medium"}
+      ]
+    },
+    video: {
+      placeholder: "Describe the video you want to create…",
+      groups: [
+        {label:"Aspect ratio", key:"ar", ratioChips:true, options:[
+          {value:"9:16", sub:"Shorts · Reels · TikTok"},
+          {value:"16:9", sub:"YouTube · Widescreen"},
+          {value:"1:1", sub:"Square · Feed"},
+          {value:"4:5", sub:"Portrait · Feed"}
+        ], value:"9:16"},
+        {label:"Duration", key:"dur", options:["5s","10s","15s","30s","60s"], value:"10s"},
+        {label:"Style", key:"style", options:["Cinematic","Anime","Realistic","3D animated"], value:"Cinematic"}
+      ]
+    }
+  };
+
+  const typeTabs = document.getElementById('typeTabs');
+  const settingsPanel = document.getElementById('settingsPanel');
+  const settingsInner = document.getElementById('settingsInner');
+  const quickInput = document.getElementById('quickInput');
+  const scriptWizard = document.getElementById('scriptWizard');
+  let activeType = null;
+
+  function ratioBox(ratioStr){
+    const [w, h] = ratioStr.split(':').map(Number);
+    const max = 20;
+    return w >= h ? {bw:max, bh:Math.round(max*h/w)} : {bh:max, bw:Math.round(max*w/h)};
+  }
+
+  function renderSettings(type){
+    const cfg = settingsConfig[type];
+    settingsInner.innerHTML = cfg.groups.map(g => {
+      if(g.ratioChips){
+        return `
+        <div class="setting-group" data-key="${g.key}">
+          <span class="setting-label">${g.label}</span>
+          <div class="chip-row">
+            ${g.options.map(o => {
+              const box = ratioBox(o.value);
+              return `<button type="button" class="chip ratio-chip ${o.value===g.value?'active':''}" data-value="${o.value}">
+                <span class="ratio-swatch" style="width:${box.bw}px;height:${box.bh}px;"></span>
+                <span class="ratio-text"><b>${o.value}</b><small>${o.sub}</small></span>
+              </button>`;
+            }).join('')}
+          </div>
+        </div>`;
+      }
+      return `
+      <div class="setting-group" data-key="${g.key}">
+        <span class="setting-label">${g.label}</span>
+        <div class="chip-row">
+          ${g.options.map(o => `<button type="button" class="chip ${o===g.value?'active':''}" data-value="${o}">${o}</button>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function selectType(type, opts){
+    opts = opts || {};
+    const already = activeType === type;
+    if(already && !opts.forceOpen){
+      // collapse if clicking the active tab again
+      activeType = null;
+      settingsPanel.classList.remove('open');
+      typeTabs.querySelectorAll('.type-tab').forEach(b => b.classList.remove('active'));
+      quickInput.placeholder = "Describe an idea, a character, a scene…";
+      scriptWizard.innerHTML = '';
+      return;
+    }
+    activeType = type;
+    typeTabs.querySelectorAll('.type-tab').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+    renderSettings(type);
+    settingsPanel.classList.add('open');
+    quickInput.placeholder = settingsConfig[type].placeholder;
+    if(type !== 'script') scriptWizard.innerHTML = '';
+  }
+
+  typeTabs.addEventListener('click', e => {
+    const btn = e.target.closest('.type-tab');
+    if(!btn) return;
+    selectType(btn.dataset.type);
+  });
+
+  settingsInner.addEventListener('click', e => {
+    const chip = e.target.closest('.chip');
+    if(!chip) return;
+    chip.closest('.setting-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  });
+
+  // ---- script wizard: concept → genre suggestions → story alternatives → script ----
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  const genreOptions = [
+    {key:'comedy', label:'Comedy'},
+    {key:'drama', label:'Drama'},
+    {key:'mystery', label:'Mystery'},
+    {key:'thriller', label:'Thriller'},
+    {key:'wholesome', label:'Wholesome'}
+  ];
+
+  const genreFlavor = {
+    comedy: {
+      loc:"EXT. CROWDED SIDEWALK — DAY",
+      beat:"Phones come out before anyone even agrees on what they just saw.",
+      lines:[["BYSTANDER 1","(pointing, phone already out)","Is that— is that real?"],
+             ["BYSTANDER 2","(backing away, half-laughing)","Please tell me somebody's filming this."]]
+    },
+    drama: {
+      loc:"EXT. QUIET INTERSECTION — DUSK",
+      beat:"For a moment, the whole street seems to hold its breath.",
+      lines:[["STRANGER 1","(quiet, almost to himself)","I didn't think I'd see something like this today."],
+             ["STRANGER 2","(not looking away)","Some days pick you. You don't pick them."]]
+    },
+    mystery: {
+      loc:"EXT. NARROW ALLEYWAY — NIGHT",
+      beat:"Someone at the edge of the crowd already looks like they know more than they're saying.",
+      lines:[["WITNESS","(too calm)","I only saw it for a second. That's all I saw."],
+             ["ONLOOKER","(under her breath)","That's not what she told me an hour ago."]]
+    },
+    thriller: {
+      loc:"EXT. MAIN STREET — NIGHT",
+      beat:"The seconds start to matter more than anyone in the crowd realizes yet.",
+      lines:[["VOICE (O.S.)","(urgent)","Move! Everybody, move now!"],
+             ["BYSTANDER","(frozen)","Which way— which way do we even go?"]]
+    },
+    wholesome: {
+      loc:"EXT. NEIGHBORHOOD PARK — GOLDEN HOUR",
+      beat:"Strangers start looking at each other differently, just for a second longer than usual.",
+      lines:[["CHILD","(delighted)","Mom, did you SEE that?!"],
+             ["MOTHER","(smiling, softer than she means to)","I saw it, sweetheart. I saw it."]]
+    }
+  };
+
+  const genreHooks = {
+    comedy: [
+      {title:"The Great Mix-Up", hook:"spirals into chaos when everyone assumes it's a viral prank — and nobody wants to admit they're confused."},
+      {title:"Rush Hour Chaos", hook:"turns a five-minute commute into the most chaotic hour of everyone's day, with one very unimpressed traffic warden."},
+      {title:"New Neighbor Energy", hook:"becomes the block's newest resident, and the neighborhood WhatsApp group has never been more unprepared."},
+      {title:"Main Character Syndrome", hook:"refuses to leave, and the whole street has to adjust to its new, extremely confident local celebrity."}
+    ],
+    drama: [
+      {title:"What We Choose to See", hook:"forces two strangers to confront what they've each been avoiding, right in the middle of a city that never stops moving."},
+      {title:"The Last Ordinary Day", hook:"becomes the moment everything changes for someone who thought today was going to be unremarkable."},
+      {title:"Between Fear and Wonder", hook:"splits a crowd between panic and awe — and quietly reveals who each of them really is under pressure."}
+    ],
+    mystery: [
+      {title:"Who Let It In", hook:"raises a bigger question: how did it actually get here, and who benefits from nobody finding out?"},
+      {title:"The Footage Nobody Shared", hook:"was caught on someone's camera — but the full clip disappeared within the hour, and somebody wants it to stay that way."},
+      {title:"Three Witnesses, Three Stories", hook:"is remembered differently by everyone who saw it, and only one version is actually telling the truth."}
+    ],
+    thriller: [
+      {title:"Sixty Seconds to Decide", hook:"forces a split-second choice that will follow one bystander for the rest of their life."},
+      {title:"Nowhere Safe to Run", hook:"turns familiar streets into a countdown, with less time to react than anyone realizes."},
+      {title:"The Setup", hook:"looks like pure chance — until the pattern of exactly who was there stops looking like a coincidence."}
+    ],
+    wholesome: [
+      {title:"An Unlikely Friendship", hook:"sparks a bond nobody expected, and the whole neighborhood ends up a little better for it."},
+      {title:"Small Acts, Big Ripples", hook:"reminds a tired city that kindness is still contagious, one small moment at a time."},
+      {title:"Found Family", hook:"brings together people who didn't know they needed each other — until this exact moment."}
+    ]
+  };
+
+  function sourceBadgeHtml(){
+    const src = scriptWizard.dataset.source;
+    return src ? `<div class="wizard-source">✦ From ${escapeHtml(src)}</div>` : '';
+  }
+
+  function withThinking(label, cb, delay){
+    scriptWizard.innerHTML = `<div class="wizard-step">
+      ${sourceBadgeHtml()}
+      <div class="wizard-label">${label}</div>
+      <div class="wizard-loading"><span></span><span></span><span></span></div>
+    </div>`;
+    setTimeout(cb, delay || 700);
+  }
+
+  function renderGenreStep(topic){
+    settingsPanel.classList.remove('open');
+    withThinking(`Reading “${escapeHtml(topic)}”…`, () => {
+      scriptWizard.dataset.topic = topic;
+      scriptWizard.innerHTML = `
+        <div class="wizard-step">
+          ${sourceBadgeHtml()}
+          <div class="wizard-label">What kind of story fits “<b>${escapeHtml(topic)}</b>”?</div>
+          <div class="chip-row">
+            ${genreOptions.map(g => `<button type="button" class="chip genre-chip" data-genre="${g.key}">${g.label}</button>`).join('')}
+          </div>
+        </div>`;
+    });
+  }
+
+  function renderPremiseStep(topic, genreKey){
+    settingsPanel.classList.remove('open');
+    const genreLabel = genreOptions.find(g => g.key === genreKey).label;
+    withThinking(`Sketching ${genreLabel.toLowerCase()} directions…`, async () => {
+      let premises = null;
+      if(API_URL){
+        try{ premises = (await api('/concept',{topic, genre: genreLabel})).premises; }catch(e){ showToast('AI unavailable — showing sample ideas'); }
+      }
+      if(!premises) premises = genreHooks[genreKey].map(h => ({title: h.title, blurb: `${topic} ${h.hook}`}));
+      scriptWizard.dataset.topic = topic;
+      scriptWizard.dataset.genre = genreKey;
+      scriptWizard._premises = premises;
+      scriptWizard.innerHTML = `
+        <div class="wizard-step">
+          ${sourceBadgeHtml()}
+          <button type="button" class="wizard-back" data-back="genre">‹ Back to genres</button>
+          <div class="wizard-label">${genreLabel} directions for “<b>${escapeHtml(topic)}</b>”</div>
+          <div class="premise-grid">
+            ${premises.map((p, i) => `
+              <button type="button" class="premise-card" data-index="${i}">
+                <span class="premise-title">${escapeHtml(p.title)}</span>
+                <span class="premise-blurb">${escapeHtml(p.blurb)}</span>
+              </button>`).join('')}
+          </div>
+        </div>`;
+    });
+  }
+
+  function renderDialogueStep(topic, genreKey, premise){
+    settingsPanel.classList.remove('open');
+    withThinking(`Setting up the scene…`, () => {
+      scriptWizard._selectedPremise = premise;
+      scriptWizard.innerHTML = `
+        <div class="wizard-step">
+          ${sourceBadgeHtml()}
+          <button type="button" class="wizard-back" data-back="premise">‹ Back to directions</button>
+          <div class="wizard-label">Should “<b>${escapeHtml(premise.title)}</b>” include dialogue?</div>
+          <div class="dialogue-choice">
+            <button type="button" class="dialogue-option" data-dialogue="yes">
+              <span class="dopt-title">Yes, with dialogue</span>
+              <span class="dopt-sub">Characters speak — reads like a scripted scene</span>
+            </button>
+            <button type="button" class="dialogue-option" data-dialogue="no">
+              <span class="dopt-title">No, narration only</span>
+              <span class="dopt-sub">Pure description and action, voiceover-ready</span>
+            </button>
+          </div>
+        </div>`;
+    }, 500);
+  }
+
+  function renderCastStep(topic, genreKey, premise){
+    settingsPanel.classList.remove('open');
+    withThinking(`Checking your character library…`, () => {
+      scriptWizard.innerHTML = `
+        <div class="wizard-step">
+          ${sourceBadgeHtml()}
+          <button type="button" class="wizard-back" data-back="dialogue">‹ Back</button>
+          <div class="wizard-label">Cast one of your characters into this scene?</div>
+          <div class="cast-grid">
+            ${characters.map((c, i) => `
+              <button type="button" class="cast-option" data-cast-index="${i}">
+                <span class="cast-avatar ${c.tone}">${c.icon}</span>
+                <span class="cast-name">${escapeHtml(c.name)}</span>
+              </button>`).join('')}
+          </div>
+          <button type="button" class="wizard-text-btn" data-cast-skip="1">Skip — use generic voices</button>
+        </div>`;
+    }, 500);
+  }
+
+  function getSelectedLength(){
+    const active = settingsInner.querySelector('.setting-group[data-key="len"] .chip.active');
+    return active ? active.dataset.value : 'Medium';
+  }
+
+  const conceptRolePools = [
+    {kws:['city','street','town','downtown','urban','sidewalk'], roles:['STREET VENDOR','OFF-DUTY COP','DELIVERY RIDER','CAFE OWNER']},
+    {kws:['beach','ocean','sea','wave','shore','swim','island','dolphin'], roles:['LIFEGUARD','SURFER','FISHERMAN','BEACHGOER']},
+    {kws:['forest','jungle','woods','trail','mountain','hike'], roles:['PARK RANGER','HIKER','CAMPER','GUIDE']},
+    {kws:['school','class','student','campus','classroom'], roles:['TEACHER','STUDENT','PRINCIPAL','HALL MONITOR']},
+    {kws:['office','work','meeting','desk','boardroom'], roles:['COWORKER','MANAGER','INTERN','RECEPTIONIST']},
+    {kws:['airport','flight','plane','terminal'], roles:['FLIGHT ATTENDANT','PASSENGER','PILOT','GATE AGENT']},
+    {kws:['hospital','doctor','nurse','clinic'], roles:['NURSE','DOCTOR','PATIENT','ORDERLY']},
+    {kws:['market','shop','store','mall','grocery'], roles:['SHOPKEEPER','CUSTOMER','CASHIER','SECURITY GUARD']}
+  ];
+  function conceptRoles(topic){
+    const t = topic.toLowerCase();
+    const pool = conceptRolePools.find(p => p.kws.some(k => t.includes(k)));
+    return pool ? pool.roles : null;
+  }
+
+  function buildScriptLines(topic, genreKey, premise, withDialogue, length, castCharacter){
+    const flavor = genreFlavor[genreKey];
+    const roles = conceptRoles(topic);
+    const lines = [
+      {type:'transition', text:'FADE IN:'},
+      {type:'heading', text: flavor.loc},
+      {type:'action', text: `${topic}. Nobody expected this.`},
+      {type:'action', text: premise.blurb}
+    ];
+
+    if(withDialogue){
+      let pairs = flavor.lines.map(p => p.slice());
+      if(roles){
+        pairs = pairs.map((p, i) => [roles[i % roles.length], p[1], p[2]]);
+      }
+      if(castCharacter){
+        pairs[0] = [castCharacter.name.toUpperCase(), `(${castCharacter.voice})`, pairs[0][2]];
+      }
+      if(length === 'Short'){
+        pairs = pairs.slice(0, 1);
+      } else if(length === 'Long'){
+        const extraName = roles ? (roles[2] || roles[0]) : 'WITNESS';
+        pairs = pairs.concat([[extraName, "(still catching their breath)", "Somebody explain this to me later."]]);
+      }
+      pairs.forEach(([name, paren, text]) => {
+        lines.push({type:'character', text: name});
+        lines.push({type:'paren', text: paren});
+        lines.push({type:'dialogue', text});
+      });
+      lines.push({type:'action', text: flavor.beat});
+      if(length === 'Long'){
+        lines.push({type:'action', text:"By the time anyone thinks to get real footage, the story's already three blocks ahead of them."});
+      }
+    } else {
+      if(length === 'Short'){
+        // base lines only — nothing further
+      } else if(length === 'Long'){
+        lines.push({type:'action', text: `${flavor.beat} No one speaks; the moment says enough on its own.`});
+        lines.push({type:'action', text:"By the time anyone thinks to get real footage, the story's already three blocks ahead of them."});
+      } else {
+        lines.push({type:'action', text: `${flavor.beat} No one speaks; the moment says enough on its own.`});
+      }
+    }
+    return lines;
+  }
+
+  function scriptLineHtml(line){
+    return `<div class="script-line ${line.type}">${escapeHtml(line.text)}</div>`;
+  }
+
+  function renderScriptStep(topic, genreKey, premise, withDialogue, castCharacter){
+    withThinking(`Writing your scene…`, () => {
+      const genreLabel = genreOptions.find(g => g.key === genreKey).label;
+      const length = getSelectedLength();
+      const lines = buildScriptLines(topic, genreKey, premise, withDialogue, length, castCharacter);
+      const wordCount = lines.reduce((n, l) => n + l.text.split(/\s+/).filter(Boolean).length, 0);
+      const readSeconds = Math.max(5, Math.round(wordCount / 2.5));
+      scriptWizard._scriptMeta = {topic, genreKey, genreLabel, premise, withDialogue, castCharacter, length};
+      scriptWizard.innerHTML = `
+        <div class="wizard-step">
+          ${sourceBadgeHtml()}
+          <button type="button" class="wizard-back" data-back="${withDialogue ? 'cast' : 'dialogue'}">‹ Back</button>
+          <div class="wizard-title-row">
+            <label class="wizard-title-label" for="scriptTitleInput">Title</label>
+            <input type="text" id="scriptTitleInput" class="script-title-input" value="${escapeHtml(premise.title)}" maxlength="60">
+          </div>
+          <div class="wizard-tags-row">
+            <span class="wizard-tag">${genreLabel}</span>
+            <span class="wizard-tag">${length}</span>
+            <span class="wizard-tag">${withDialogue ? 'With dialogue' : 'Narration only'}</span>
+            ${castCharacter ? `<span class="wizard-tag cast-tag">${castCharacter.icon} ${escapeHtml(castCharacter.name)}</span>` : ''}
+          </div>
+          <div class="script-output" id="scriptOutput" contenteditable="true" spellcheck="false">
+            ${lines.map(scriptLineHtml).join('')}
+          </div>
+          <div class="script-meta">
+            <span>${wordCount} words · ~${readSeconds}s read</span>
+            <button type="button" class="script-copy-btn" id="copyScriptBtn">
+              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="wizard-actions">
+            <button type="button" class="generate-btn" id="saveScriptBtn">Save script</button>
+            <button type="button" class="wizard-outline-btn" id="continueJourneyBtn">Continue the journey →</button>
+          </div>
+          <button type="button" class="wizard-text-btn" data-back="premise">Try another direction</button>
+          <div class="wizard-crosslink">
+            <span class="wizard-crosslink-label">Turn this script into:</span>
+            <div class="chip-row">
+              <button type="button" class="chip" data-continue="video">Video</button>
+              <button type="button" class="chip" data-continue="image">Image</button>
+              <button type="button" class="chip" data-continue="voice">Voice</button>
+            </div>
+          </div>
+        </div>`;
+    }, 800);
+  }
+
+  scriptWizard.addEventListener('click', e => {
+    const genreChip = e.target.closest('.genre-chip');
+    if(genreChip){
+      renderPremiseStep(scriptWizard.dataset.topic, genreChip.dataset.genre);
+      return;
+    }
+    const premiseCard = e.target.closest('.premise-card');
+    if(premiseCard){
+      const premise = scriptWizard._premises[Number(premiseCard.dataset.index)];
+      renderDialogueStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, premise);
+      return;
+    }
+    const dialogueBtn = e.target.closest('.dialogue-option');
+    if(dialogueBtn){
+      const withDialogue = dialogueBtn.dataset.dialogue === 'yes';
+      if(withDialogue){
+        scriptWizard._withDialogue = true;
+        renderCastStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, scriptWizard._selectedPremise);
+      } else {
+        renderScriptStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, scriptWizard._selectedPremise, false, null);
+      }
+      return;
+    }
+    const castOption = e.target.closest('.cast-option');
+    if(castOption){
+      const character = characters[Number(castOption.dataset.castIndex)];
+      renderScriptStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, scriptWizard._selectedPremise, true, character);
+      return;
+    }
+    const castSkip = e.target.closest('[data-cast-skip]');
+    if(castSkip){
+      renderScriptStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, scriptWizard._selectedPremise, true, null);
+      return;
+    }
+    const copyBtn = e.target.closest('#copyScriptBtn');
+    if(copyBtn){
+      const out = document.getElementById('scriptOutput');
+      const text = Array.from(out.children).map(el => el.textContent).join('\n');
+      const originalHtml = copyBtn.innerHTML;
+      const done = () => {
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Copied';
+        setTimeout(() => {
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = originalHtml;
+        }, 1600);
+      };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done).catch(() => showToast('Select the text above to copy manually'));
+      } else {
+        showToast('Select the text above to copy manually');
+      }
+      return;
+    }
+    const saveBtn = e.target.closest('#saveScriptBtn');
+    if(saveBtn){
+      const m = scriptWizard._scriptMeta;
+      const titleEl = document.getElementById('scriptTitleInput');
+      const title = (titleEl && titleEl.value.trim()) || m.premise.title;
+      const subParts = [m.genreLabel, m.length, m.withDialogue ? 'With dialogue' : 'Narration'];
+      if(m.castCharacter) subParts.push(`cast: ${m.castCharacter.name}`);
+      projects.unshift({icon:"📄", name: title, sub: subParts.join(' · '), pct: 10, tone:"tone-a"});
+      renderProjects();
+      showToast('Script saved to Continue creating');
+      scriptWizard.innerHTML = '';
+      quickInput.value = '';
+      return;
+    }
+    const continueBtn = e.target.closest('#continueJourneyBtn');
+    if(continueBtn){
+      const m = scriptWizard._scriptMeta;
+      const titleEl = document.getElementById('scriptTitleInput');
+      const title = (titleEl && titleEl.value.trim()) || m.premise.title;
+      const subParts = [m.genreLabel, m.length, m.withDialogue ? 'With dialogue' : 'Narration'];
+      if(m.castCharacter) subParts.push(`cast: ${m.castCharacter.name}`);
+      projects.unshift({icon:"📄", name: title, sub: subParts.join(' · '), pct: 10, tone:"tone-a"});
+      renderProjects(true);
+      showToast('Script saved — choose what to create next');
+      scriptWizard.innerHTML = `
+        <div class="wizard-step">
+          ${sourceBadgeHtml()}
+          <div class="wizard-label">“<b>${escapeHtml(title)}</b>” is saved. What's next?</div>
+          <div class="chip-row">
+            <button type="button" class="chip" data-continue="video">Turn into Video</button>
+            <button type="button" class="chip" data-continue="image">Turn into Image</button>
+            <button type="button" class="chip" data-continue="voice">Turn into Voice</button>
+          </div>
+          <button type="button" class="wizard-text-btn" id="doneForNowBtn">I'm done for now</button>
+        </div>`;
+      return;
+    }
+    const doneBtn = e.target.closest('#doneForNowBtn');
+    if(doneBtn){
+      scriptWizard.innerHTML = '';
+      quickInput.value = '';
+      document.getElementById('projList').scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
+    const backBtn = e.target.closest('[data-back]');
+    if(backBtn){
+      const dest = backBtn.dataset.back;
+      if(dest === 'genre') renderGenreStep(scriptWizard.dataset.topic);
+      else if(dest === 'dialogue') renderDialogueStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, scriptWizard._selectedPremise);
+      else if(dest === 'cast') renderCastStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre, scriptWizard._selectedPremise);
+      else renderPremiseStep(scriptWizard.dataset.topic, scriptWizard.dataset.genre);
+      return;
+    }
+    const crossBtn = e.target.closest('[data-continue]');
+    if(crossBtn){
+      const premise = scriptWizard._selectedPremise;
+      continueAsInput(`Script: ${premise ? premise.title : scriptWizard.dataset.topic}`, 'doc', crossBtn.dataset.continue);
+    }
+  });
+
+  // ---- cross-type chaining: any generated output can feed the next generation as a reference ----
+  function continueAsInput(sourceLabel, sourceKind, targetType){
+    attachedFiles.push({name: sourceLabel, size:'Reference', kind: sourceKind});
+    renderFileChips();
+    scriptWizard.innerHTML = '';
+    selectType(targetType, {forceOpen:true});
+    quickInput.value = `Based on “${sourceLabel.replace(/^Script:\s*/,'').replace(/^Image:\s*/,'').replace(/^Voice:\s*/,'').replace(/^Video:\s*/,'')}”`;
+    showToast(`Carried into ${targetType} as a reference`);
+    document.querySelector('.quick-panel').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  function goScriptFromTopic(topic, source){
+    scriptWizard.dataset.source = source || '';
+    selectType('script', {forceOpen:true});
+    quickInput.value = topic;
+    renderGenreStep(topic);
+    document.querySelector('.quick-panel').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  // ---- file attachments (demo picker — native OS file dialogs are blocked in this preview sandbox) ----
+  const attachBtn = document.getElementById('attachBtn');
+  const attachPopover = document.getElementById('attachPopover');
+  const fileChips = document.getElementById('fileChips');
+  let attachedFiles = [];
+
+  const kindIcon = {
+    image:'<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+    video:'<svg viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>',
+    voice:'<svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/></svg>',
+    doc:'<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+  };
+
+  function renderFileChips(){
+    fileChips.innerHTML = attachedFiles.map((f, i) => `
+      <div class="file-chip">
+        <span style="width:14px;height:14px;flex:none;display:flex;color:var(--brass);">${kindIcon[f.kind]}</span>
+        <span class="fname">${f.name}</span>
+        <span class="fsize">${f.size}</span>
+        <span class="fremove" data-index="${i}">✕</span>
+      </div>`).join('');
+    attachBtn.classList.toggle('has-files', attachedFiles.length > 0);
+  }
+
+  attachBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    attachPopover.classList.toggle('open');
+  });
+  document.addEventListener('click', () => attachPopover.classList.remove('open'));
+  attachPopover.addEventListener('click', e => e.stopPropagation());
+
+  attachPopover.addEventListener('click', e => {
+    const item = e.target.closest('.attach-popover-item');
+    if(!item) return;
+    attachedFiles.push({name:item.dataset.name, size:item.dataset.size, kind:item.dataset.kind});
+    renderFileChips();
+    attachPopover.classList.remove('open');
+    if(!activeType && settingsConfig[item.dataset.kind]) selectType(item.dataset.kind, {forceOpen:true});
+  });
+
+  fileChips.addEventListener('click', e => {
+    const rm = e.target.closest('.fremove');
+    if(!rm) return;
+    attachedFiles.splice(Number(rm.dataset.index), 1);
+    renderFileChips();
+  });
+
+  // ---- backend: paste your Cloudflare Worker URL (see README). Empty = demo mode ----
+  const API_URL = "";
+  async function api(path, body){
+    const r = await fetch(API_URL + path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(j.error || 'Request failed — try again');
+    return j;
+  }
+  function showImage(src, prompt){
+    const o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px';
+    o.innerHTML = `<img src="${src}" alt="${escapeHtml(prompt)}" style="max-width:100%;max-height:70vh;border-radius:12px">
+      <div style="display:flex;gap:10px"><a href="${src}" download="ridea.png" class="generate-btn" style="text-decoration:none;padding:10px 18px;border-radius:10px">Download</a>
+      <button class="generate-btn" style="padding:10px 18px;border-radius:10px">Close</button></div>`;
+    o.addEventListener('click', e => { if(e.target === o || e.target.tagName === 'BUTTON') o.remove(); });
+    document.body.appendChild(o);
+  }
+
+  // ---- generate (image + concepts are real when API_URL is set) ----
+  const generateBtn = document.getElementById('generateBtn');
+  const toast = document.getElementById('toast');
+  const toastMsg = document.getElementById('toastMsg');
+  let toastTimer = null;
+
+  function showToast(msg){
+    toastMsg.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+  }
+
+  generateBtn.addEventListener('click', () => {
+    if(generateBtn.classList.contains('loading')) return;
+
+    if(activeType === 'script'){
+      const topic = quickInput.value.trim();
+      if(!topic){ quickInput.focus(); return; }
+      scriptWizard.dataset.source = '';
+      renderGenreStep(topic);
+      return;
+    }
+
+    const type = activeType || 'image';
+    const label = type.charAt(0).toUpperCase() + type.slice(1);
+    generateBtn.classList.add('loading');
+    generateBtn.querySelector('.gen-label').textContent = 'Generating…';
+    generateBtn.querySelector('.gen-arrow').outerHTML = '<svg class="gen-arrow spin" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/></svg>';
+    const desc = quickInput.value.trim() || 'Untitled concept';
+    const reset = () => {
+      generateBtn.classList.remove('loading');
+      generateBtn.querySelector('.gen-label').textContent = 'Generate';
+      const arrow = generateBtn.querySelector('.gen-arrow');
+      if(arrow) arrow.outerHTML = '<svg class="gen-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+    };
+    const finish = (img) => {
+      reset();
+      projects.unshift({icon: type==='video' ? '🎬' : type==='voice' ? '🎵' : '🖼️', name: desc, pct: 15, tone:"tone-a"});
+      renderProjects();
+      attachedFiles.push({name: `${label}: ${desc}`, size:'Reference', kind: type});
+      renderFileChips();
+      showToast(label + ' added to Continue creating — usable as input elsewhere');
+      if(img) showImage(img, desc);
+    };
+    if(type === 'image' && API_URL){
+      api('/image',{prompt: desc})
+        .then(j => finish('data:image/png;base64,' + j.image))
+        .catch(e => { reset(); showToast(e.message); });
+    } else {
+      setTimeout(() => finish(null), 1500);   // video & voice: demo only
+    }
+  });
+</script>
+</body>
+</html>
