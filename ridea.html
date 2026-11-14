@@ -1391,7 +1391,7 @@
   });
 
   // ---- backend: paste your Cloudflare Worker URL (see README). Empty = demo mode ----
-  const API_URL = "";
+  const API_URL = "https://ridea-api.arghya-1001.workers.dev";
   async function api(path, body){
     const r = await fetch(API_URL + path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     const j = await r.json().catch(() => ({}));
