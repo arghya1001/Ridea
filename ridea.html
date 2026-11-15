@@ -1477,13 +1477,19 @@
         {caption:'And then, a little magic appeared.', visual: idea + ', a magical surprise, glowing light'},
         {caption:'And everything felt right.', visual: idea + ', warm golden ending, hopeful'}];
       scenes = scenes.slice(0, FN);
-      const imgs = [];
+      const imgs = []; let firstB64 = null;
       for(let i = 0; i < FN && alive; i++){
         st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
         const j = await api('/image', {prompt: styled(scenes[i].visual)});
+        if(i === 0) firstB64 = j.image;
         imgs.push(await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; }));
       }
       if(!alive) return;
+      try{
+        const cover = await shrink('data:image/png;base64,' + firstB64), nm = escapeHtml(('Film: ' + idea).length > 28 ? ('Film: ' + idea).slice(0, 28).trim() + '…' : 'Film: ' + idea);
+        const g = loadGallery(); g.unshift({name: nm, img: cover}); saveGallery(g); renderPassby(true);
+        projects.unshift({icon:'🎬', name: nm, pct: 100, tone:'tone-a', img: cover}); renderProjects();
+      }catch(e){}
       const glows = imgs.map(im => { const c = document.createElement('canvas'); c.width = 160; c.height = Math.round(160*im.height/im.width); const g = c.getContext('2d'); try{ g.filter = 'blur(2px) brightness(1.7) contrast(1.3)'; }catch(e){} g.drawImage(im, 0, 0, c.width, c.height); return c; });
       const parts = Array.from({length: 36}, () => ({x: Math.random()*FW, y: Math.random()*FH, r: 1 + Math.random()*2.5, v: 8 + Math.random()*18, p: Math.random()*6}));
       const wrap = (s2, mw) => { const out = []; let l = ''; s2.split(' ').forEach(w => { const t2 = l ? l + ' ' + w : w; if(cx.measureText(t2).width > mw && l){ out.push(l); l = w; } else l = t2; }); out.push(l); return out; };
@@ -1494,7 +1500,7 @@
         cx.globalAlpha = a;
         for(let n = 0; n < N; n++){            // draw in thin strips so the picture ripples like wind
           const y01 = n/N, sky = Math.max(0, .45 - y01)/.45;
-          const off = Math.sin(t*.9 + n*.35 + i)*(2 + 4*y01) + sky*Math.sin(t*.35 + i)*10;   // trees/grass sway, sky drifts
+          const off = Math.sin(t*.9 + n*.35 + i)*(4 + 10*y01) + sky*Math.sin(t*.35 + i)*28;   // trees/grass sway, sky drifts
           cx.drawImage(img, 0, n*sh, img.width, sh + 1, x0 + off, y0 + n*dh, w, dh + 1);
         }
         cx.globalAlpha = 1;
@@ -1509,7 +1515,7 @@
         for(let n = 0; n < 3; n++){            // drifting mist over the sky
           const x = ((t*(10 + n*6) + n*220) % (FW + 400)) - 200, y = 70 + n*95;
           cx.save(); cx.translate(x, y); cx.scale(1, .4);
-          const gr = cx.createRadialGradient(0, 0, 10, 0, 0, 190); gr.addColorStop(0, 'rgba(255,255,255,.34)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+          const gr = cx.createRadialGradient(0, 0, 10, 0, 0, 190); gr.addColorStop(0, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
           cx.fillStyle = gr; cx.fillRect(-190, -190, 380, 380); cx.restore();
         }
         const g = cx.createLinearGradient(0, 0, FW, FH*.7); g.addColorStop(0, `rgba(255,230,170,${.10 + .05*Math.sin(t*1.3)})`); g.addColorStop(.5, 'rgba(255,230,170,0)');
@@ -1523,17 +1529,23 @@
       };
       frame(0); st('Ready — tap Play. Narration plays aloud; the saved video has music.'); $('fp').style.display = '';
       $('fp').onclick = () => {
-        $('fp').style.display = 'none'; $('fd').style.display = 'none';
+        $('fp').style.display = 'none'; $('fd').style.display = 'none'; cv.style.display = ''; const oldV = ov.querySelector('video'); if(oldV) oldV.remove();
         const total = FD*FN, ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination(), gain = ac.createGain(), now = ac.currentTime;
         gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(.06, now + 1.2); gain.gain.setValueAtTime(.06, now + total - 1.5); gain.gain.linearRampToValueAtTime(0, now + total);
         [220, 277.18, 329.63, 440].forEach(f => { const o = ac.createOscillator(); o.frequency.value = f; o.connect(gain); o.start(); o.stop(now + total + .2); });
         gain.connect(dest); gain.connect(ac.destination);
         const stream = cv.captureStream(30); dest.stream.getAudioTracks().forEach(tk => stream.addTrack(tk));
-        const mt = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '', chunks = [];
+        const mt = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '', chunks = [];
         try{ rec = new MediaRecorder(stream, mt ? {mimeType: mt, videoBitsPerSecond: 3e6} : undefined); }catch(e){ rec = null; }
         if(rec){
           rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
-          rec.onstop = () => { const a = $('fd'); a.href = URL.createObjectURL(new Blob(chunks, {type: mt || 'video/webm'})); a.download = 'ridea-film-' + Date.now() + (mt.includes('mp4') ? '.mp4' : '.webm'); a.style.display = ''; };
+          rec.onstop = () => {
+            const url = URL.createObjectURL(new Blob(chunks, {type: mt || 'video/webm'})), a = $('fd'), mp4 = mt.includes('mp4');
+            a.href = url; a.download = 'ridea-film-' + Date.now() + (mp4 ? '.mp4' : '.webm'); a.style.display = '';
+            const vid = document.createElement('video'); vid.controls = true; vid.playsInline = true; vid.src = url; vid.style.cssText = 'width:min(100%,360px);border-radius:12px';
+            cv.style.display = 'none'; cv.after(vid);
+            st('Saved as ' + (mp4 ? 'MP4' : 'WEBM') + (mp4 ? '' : ' — if your Gallery cannot play it, open it in Chrome or VLC'));
+          };
           rec.start();
         }
         const t0 = performance.now(); let last = -1;
