@@ -1424,17 +1424,18 @@
     if(!r.ok) throw new Error(j.error || 'Request failed — try again');
     return j;
   }
-  function showImage(src, prompt){
+  function showImage(src, prompt, key){
+    key = key || src;
     const o = document.createElement('div');
     o.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px';
     o.innerHTML = `<img src="${src}" alt="${escapeHtml(prompt)}" style="max-width:100%;max-height:70vh;border-radius:12px">
-      <div style="display:flex;gap:10px"><a href="${src}" download="ridea.png" class="generate-btn" style="text-decoration:none;padding:10px 18px;border-radius:10px">Download</a>
+      <div style="display:flex;gap:10px"><a href="${src}" download="ridea-${Date.now()}.${src.startsWith('data:image/jpeg') ? 'jpg' : 'png'}" class="generate-btn" style="text-decoration:none;padding:10px 18px;border-radius:10px">Download</a>
       <button data-char class="generate-btn" style="padding:10px 18px;border-radius:10px">Save as character</button>
       <button class="generate-btn" style="padding:10px 18px;border-radius:10px">Close</button></div>`;
     o.addEventListener('click', e => {
       if(e.target.hasAttribute && e.target.hasAttribute('data-char')){
         const n = (prompt('Name your character') || '').trim().slice(0, 24);
-        if(n){ const g = loadGallery(), k = g.findIndex(x => x.img === src);
+        if(n){ const g = loadGallery(), k = g.findIndex(x => x.img === key);
           if(k >= 0){ g[k].char = true; g[k].name = escapeHtml(n); saveGallery(g); renderPassby(); showToast('Saved as character: ' + n); } }
       }
       if(e.target === o || e.target.tagName === 'BUTTON') o.remove();
@@ -1445,9 +1446,11 @@
   // ---- gallery: images saved in this browser (localStorage) ----
   const GAL = 'ridea-gallery-v1';
   function loadGallery(){ try{ return JSON.parse(localStorage.getItem(GAL) || '[]'); }catch(e){ return []; } }
-  function saveGallery(g){
-    try{ localStorage.setItem(GAL, JSON.stringify(g.slice(0, 12))); }
-    catch(e){ try{ localStorage.setItem(GAL, JSON.stringify(g.slice(0, 5))); }catch(_){} }
+  function saveGallery(g){   // keeps the latest 10 images + up to 3 saved characters, on this device only
+    const ch = g.filter(x => x.char).slice(0, 3), im = g.filter(x => !x.char).slice(0, 10);
+    const keep = g.filter(x => ch.includes(x) || im.includes(x));
+    try{ localStorage.setItem(GAL, JSON.stringify(keep)); }
+    catch(e){ try{ localStorage.setItem(GAL, JSON.stringify(keep.slice(0, 5))); }catch(_){} }
   }
   function shrink(src){
     return new Promise(res => {
@@ -1529,7 +1532,7 @@
       attachedFiles.push({name: `${label}: ${desc}`, size:'Reference', kind: type});
       renderFileChips();
       showToast(label + ' added to Continue creating — usable as input elsewhere');
-      if(img) showImage(thumb || img, desc);
+      if(img) showImage(img, desc, thumb);
     };
     if(type === 'image' && API_URL){
       api('/image',{prompt: desc})
