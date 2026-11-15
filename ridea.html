@@ -3,16 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0b1a">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Ridea — AI Creative Partner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink-950:#0d0c10; --ink-900:#151318; --ink-850:#1b181f; --ink-800:#221f27;
+    --ink-950:#0b0b1a; --ink-900:#14142b; --ink-850:#1b1b38; --ink-800:#222244;
     --hairline:rgba(255,255,255,0.09); --hairline-strong:rgba(255,255,255,0.16);
-    --brass:#c9a15c; --emerald:#3f8a72; --wine:#8a4a52;
-    --paper:#f4efe4; --paper-dim:#a39d8e;
+    --brass:#a99bff; --emerald:#e58bd9; --wine:#e3bc74;
+    --paper:#f6f3ec; --paper-dim:#9a9cc0;
     padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
   }
   :root[data-theme="teal"]{
@@ -91,7 +97,7 @@
     box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); transition:transform .15s ease, border-color .15s ease;}
   .swatch:hover{transform:translateY(-1px);}
   .swatch.active{border-color:var(--paper);}
-  .swatch.sw-brass{background:linear-gradient(135deg,#c9a15c,#3f8a72);}
+  .swatch.sw-brass{background:linear-gradient(135deg,#8b7cff,#e58bd9);}
   .swatch.sw-teal{background:linear-gradient(135deg,#2dd4bf,#ff8a65);}
   .swatch.sw-northstar{background:linear-gradient(135deg,#7dc4ff,#9d8cf0);}
 
@@ -414,6 +420,24 @@
     *{transition:none !important;}
     .scene-glow,.tw,.scene-drift,.scene-fall,.scene-drip,.scene-wave,.wizard-loading span,.script-output{animation:none !important;}
   }
+
+.main{background:radial-gradient(110% 38% at 85% 0%,rgba(229,139,217,.22),transparent 60%),radial-gradient(90% 32% at 0% 5%,rgba(240,180,90,.18),transparent 60%)}
+.hero h1 em{background:linear-gradient(90deg,#e3bc74,#f29bd3);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.generate-btn{background:linear-gradient(135deg,#8b7cff,#e58bd9)!important;color:#0b0b1a!important;border:0!important}
+.passby{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);mask-image:linear-gradient(90deg,transparent,#000 7%,#000 93%,transparent);padding:8px 0 14px}
+.pb-track{display:flex;gap:14px;width:max-content;padding:0 14px}
+.pb-track.run{animation:pbmove 45s linear infinite}
+.passby:hover .pb-track.run,.passby:active .pb-track.run{animation-play-state:paused}
+@keyframes pbmove{to{transform:translateX(calc(-50% - 7px))}}
+.pb-card{flex:none;width:116px;height:150px;border-radius:18px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.14);padding:0;background:var(--ink-850);cursor:pointer;box-shadow:0 10px 30px -14px rgba(139,124,255,.55)}
+.pb-card img{width:100%;height:100%;object-fit:cover;display:block}
+.pb-card span{position:absolute;left:0;right:0;bottom:0;padding:22px 10px 9px;font:600 12px Inter,sans-serif;color:#f6f3ec;text-align:left;background:linear-gradient(0deg,rgba(11,11,26,.88),transparent)}
+.pb-card.is-char{border-color:#e3bc74;box-shadow:0 0 0 2px rgba(227,188,116,.35)}
+.pb-card.arrive{animation:pbin .9s cubic-bezier(.2,.8,.2,1) both,pbglow 2.4s ease-out}
+.pb-card.ph{cursor:default;background:linear-gradient(160deg,#3a3470,#14142b)}
+@keyframes pbin{from{opacity:0;transform:translateX(60px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes pbglow{0%{box-shadow:0 0 0 0 rgba(229,139,217,.9)}100%{box-shadow:0 0 0 22px rgba(229,139,217,0)}}
+@media (prefers-reduced-motion:reduce){.pb-track.run{animation:none}.passby{overflow-x:auto;-webkit-mask-image:none;mask-image:none}.pb-card.arrive{animation:none}}
 </style>
 </head>
 <body>
@@ -453,12 +477,12 @@
 
         <div class="theme-switch" id="themeSwitch">
           <span class="tlabel">Theme</span>
-          <button class="swatch sw-brass active" data-theme="brass" title="Brass"></button>
+          <button class="swatch sw-brass active" data-theme="brass" title="Aurora"></button>
           <button class="swatch sw-teal" data-theme="teal" title="Teal Tide"></button>
           <button class="swatch sw-northstar" data-theme="northstar" title="Northstar"></button>
         </div>
 
-        <div class="credits-pill">◆ 12,450 credits</div>
+        <div class="credits-pill">◆ 18 of 20 free today</div>
         <div class="util-icon">
           <svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         </div>
@@ -466,8 +490,8 @@
       </div>
 
       <div class="hero">
-        <h1>Good morning, Arghya.<br><em>What shall we make today?</em></h1>
-        <p>Trends are moving fast this week — pull one into a project, or start from a blank page.</p>
+        <h1><span style="display:block;font-size:.9rem;font-weight:400;color:var(--paper-dim);margin-bottom:6px">Good morning, Arghya</span>What world are we <em>building</em> today?</h1>
+        <p>Share an idea. Ridea turns it into images, stories and voices.</p>
 
         <div class="quick-panel">
           <div class="type-tabs" id="typeTabs">
@@ -540,7 +564,7 @@
       </div>
 
       <section class="block">
-        <div class="block-head"><h2>Viral trends<span class="count">this week</span></h2><a class="view-all" href="#">View all</a></div>
+        <div class="block-head"><h2>Starter ideas<span class="count">tap to remix</span></h2><a class="view-all" href="#">View all</a></div>
         <div class="hscroll" id="trends"></div>
       </section>
 
@@ -550,8 +574,8 @@
       </section>
 
       <section class="block">
-        <div class="block-head"><h2>Characters passing by</h2><a class="view-all" href="#">View all</a></div>
-        <div class="characters-row" id="characters"></div>
+        <div class="block-head"><h2>Passing by<span class="count">your creations</span></h2></div>
+        <div class="passby" id="characters"></div>
       </section>
 
       <div class="pull-quote">
@@ -697,18 +721,18 @@
     {scene:"emotional", plays:"1.3M", title:"Emotional Stories", sub:"Drama", tone:"tone-c"},
     {scene:"future", plays:"870K", title:"Future Visions", sub:"Sci-fi", tone:"tone-a"}
   ];
-  document.getElementById('trends').innerHTML = trends.map(t=>`
-    <div class="card" style="--glow:${scenes[t.scene].glow}" data-topic="${t.title}">
-      <div class="thumb" style="background:${scenes[t.scene].bg}">
-        ${sceneSvg(t.scene)}
-        <div class="scrim"></div>
-        <span class="plays"><svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>${t.plays}</span>
-      </div>
-      <div class="meta"><div class="t">${t.title}</div><div class="s">${t.sub}</div></div>
-    </div>`).join('');
+  const starters = [{"slug": "magical-pets", "title": "Magical Pets", "c": "#2fa39a", "prompt": "A tiny glowing blue dragon cub and a fluffy fox cub playing in an enchanted forest, soft magical light, storybook illustration"}, {"slug": "neon-rain-city", "title": "Neon Rain City", "c": "#b04fe0", "prompt": "Neon-lit cyberpunk city street at night in the rain, reflections on wet ground, cinematic wide shot, purple and teal lights"}, {"slug": "epic-adventure", "title": "Epic Adventure", "c": "#d89a4a", "prompt": "A young explorer standing on a cliff facing a vast golden valley at sunrise, epic adventure, cinematic"}, {"slug": "sky-islands", "title": "Sky Islands", "c": "#6a7be8", "prompt": "Floating islands with waterfalls and a fairytale castle in the sky, golden hour, fantasy world, highly detailed"}, {"slug": "space-voyage", "title": "Space Voyage", "c": "#5a4fc0", "prompt": "An astronaut gazing at a ringed planet through a small spaceship window, deep blue and violet nebula, cinematic"}, {"slug": "cozy-cabin", "title": "Cozy Cabin", "c": "#c98a4c", "prompt": "A cozy wooden cabin in a snowy forest at dawn, warm light in the windows, peaceful, painterly"}, {"slug": "robot-dreams", "title": "Robot Dreams", "c": "#3a6ea5", "prompt": "A small friendly robot sitting on a hill watching shooting stars, dreamy, soft glow, storybook style"}, {"slug": "ocean-secret", "title": "Ocean Secret", "c": "#2a8fa0", "prompt": "A giant whale swimming through glowing underwater caverns with tiny fish, bioluminescent, magical"}];
+  document.getElementById('trends').innerHTML = starters.map((t,i) => `
+    <div class="card" data-i="${i}"><div class="thumb" style="background:linear-gradient(160deg,${t.c},#14142b)">
+      <img src="showcase/${t.slug}.jpg" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()"><div class="scrim"></div></div>
+      <div class="meta"><div class="t">${t.title}</div><div class="s">Tap to remix</div></div></div>`).join('');
   document.getElementById('trends').addEventListener('click', e => {
-    const card = e.target.closest('.card');
-    if(card) goScriptFromTopic(card.dataset.topic, 'Viral Trends');
+    const c = e.target.closest('.card'); if(!c) return;
+    const q = document.getElementById('quickInput'), t = document.querySelector('.type-tab[data-type="image"]');
+    if(t) t.click();
+    q.value = starters[+c.dataset.i].prompt;
+    window.scrollTo({top:0, behavior:'smooth'}); q.focus();
+    showToast('Idea loaded — tap Generate');
   });
 
   const stories = [
@@ -741,11 +765,6 @@
     {icon:"🐉", name:"Sky Dragon", tone:"tone-b", voice:"booming, a little theatrical"},
     {icon:"🧙", name:"Wizard", tone:"tone-c", voice:"cryptic, quietly amused"}
   ];
-  document.getElementById('characters').innerHTML = characters.map(c=>`
-    <div class="char">
-      <div class="avatar ${c.tone}">${c.icon}</div>
-      <div class="name">${c.name}</div>
-    </div>`).join('');
 
   const projects = [
     {icon:"🌲", name:"Mystical Forest Adventure", pct:60, tone:"tone-b"},
@@ -756,7 +775,7 @@
   function renderProjects(highlightFirst){
     document.getElementById('projList').innerHTML = projects.map((p,i)=>`
       <div class="proj-item ${highlightFirst && i===0 ? 'proj-new' : ''}">
-        <div class="proj-thumb ${p.tone}">${p.icon}</div>
+        <div class="proj-thumb ${p.tone}" style="${p.img ? 'overflow:hidden;cursor:pointer' : ''}">${p.img ? `<img src="${p.img}" alt="" style="width:100%;height:100%;object-fit:cover">` : p.icon}</div>
         <div class="proj-info">
           <div class="name">${p.name}</div>
           ${p.sub ? `<div class="proj-sub">${p.sub}</div>` : ''}
@@ -1162,10 +1181,17 @@
   }
 
   function renderScriptStep(topic, genreKey, premise, withDialogue, castCharacter){
-    withThinking(`Writing your scene…`, () => {
+    withThinking(`Writing your scene…`, async () => {
       const genreLabel = genreOptions.find(g => g.key === genreKey).label;
       const length = getSelectedLength();
-      const lines = buildScriptLines(topic, genreKey, premise, withDialogue, length, castCharacter);
+      let lines = null;
+      if(API_URL){
+        try{
+          lines = (await api('/script',{topic, genre: genreLabel, premise, withDialogue, length,
+            cast: castCharacter ? {name: castCharacter.name, voice: castCharacter.voice} : null})).lines;
+        }catch(e){ showToast('AI unavailable — using sample script'); }
+      }
+      if(!lines) lines = buildScriptLines(topic, genreKey, premise, withDialogue, length, castCharacter);
       const wordCount = lines.reduce((n, l) => n + l.text.split(/\s+/).filter(Boolean).length, 0);
       const readSeconds = Math.max(5, Math.round(wordCount / 2.5));
       scriptWizard._scriptMeta = {topic, genreKey, genreLabel, premise, withDialogue, castCharacter, length};
@@ -1403,10 +1429,60 @@
     o.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px';
     o.innerHTML = `<img src="${src}" alt="${escapeHtml(prompt)}" style="max-width:100%;max-height:70vh;border-radius:12px">
       <div style="display:flex;gap:10px"><a href="${src}" download="ridea.png" class="generate-btn" style="text-decoration:none;padding:10px 18px;border-radius:10px">Download</a>
+      <button data-char class="generate-btn" style="padding:10px 18px;border-radius:10px">Save as character</button>
       <button class="generate-btn" style="padding:10px 18px;border-radius:10px">Close</button></div>`;
-    o.addEventListener('click', e => { if(e.target === o || e.target.tagName === 'BUTTON') o.remove(); });
+    o.addEventListener('click', e => {
+      if(e.target.hasAttribute && e.target.hasAttribute('data-char')){
+        const n = (prompt('Name your character') || '').trim().slice(0, 24);
+        if(n){ const g = loadGallery(), k = g.findIndex(x => x.img === src);
+          if(k >= 0){ g[k].char = true; g[k].name = escapeHtml(n); saveGallery(g); renderPassby(); showToast('Saved as character: ' + n); } }
+      }
+      if(e.target === o || e.target.tagName === 'BUTTON') o.remove();
+    });
     document.body.appendChild(o);
   }
+
+  // ---- gallery: images saved in this browser (localStorage) ----
+  const GAL = 'ridea-gallery-v1';
+  function loadGallery(){ try{ return JSON.parse(localStorage.getItem(GAL) || '[]'); }catch(e){ return []; } }
+  function saveGallery(g){
+    try{ localStorage.setItem(GAL, JSON.stringify(g.slice(0, 12))); }
+    catch(e){ try{ localStorage.setItem(GAL, JSON.stringify(g.slice(0, 5))); }catch(_){} }
+  }
+  function shrink(src){
+    return new Promise(res => {
+      const im = new Image();
+      im.onload = () => {
+        const k = Math.min(1, 768 / Math.max(im.width, im.height));
+        const c = document.createElement('canvas'); c.width = im.width * k; c.height = im.height * k;
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', 0.82));
+      };
+      im.onerror = () => res(src);
+      im.src = src;
+    });
+  }
+  loadGallery().reverse().forEach(g => projects.unshift({icon:'🖼️', name:g.name, pct:100, tone:'tone-a', img:g.img}));
+  function renderPassby(arrive){
+    const box = document.getElementById('characters'), g = loadGallery();
+    if(!g.length){
+      box.innerHTML = '<div class="pb-track">' + ['Your images','Your characters','Your stories','Your worlds'].map(t => `<div class="pb-card ph"><span>${t}</span></div>`).join('') + '</div>';
+      return;
+    }
+    const one = g.map((x,i) => `<button class="pb-card${x.char?' is-char':''}${arrive&&i===0?' arrive':''}" data-i="${i}"><img src="${x.img}" alt=""><span>${x.name}</span></button>`).join('');
+    box.innerHTML = g.length >= 3 ? `<div class="pb-track run">${one}${one.replace(/ arrive/g,'')}</div>` : `<div class="pb-track">${one}</div>`;
+  }
+  document.getElementById('characters').addEventListener('click', e => {
+    const c = e.target.closest('.pb-card[data-i]'); if(!c) return;
+    const x = loadGallery()[+c.dataset.i]; if(x) showImage(x.img, x.name);
+  });
+  renderPassby();
+  renderProjects();
+  document.getElementById('projList').addEventListener('click', e => {
+    const it = e.target.closest('.proj-item'); if(!it) return;
+    const p = projects[[...it.parentNode.children].indexOf(it)];
+    if(p && p.img) showImage(p.img, p.name);
+  });
 
   // ---- generate (image + concepts are real when API_URL is set) ----
   const generateBtn = document.getElementById('generateBtn');
@@ -1444,14 +1520,16 @@
       const arrow = generateBtn.querySelector('.gen-arrow');
       if(arrow) arrow.outerHTML = '<svg class="gen-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
     };
-    const finish = (img) => {
+    const finish = async (img) => {
       reset();
-      projects.unshift({icon: type==='video' ? '🎬' : type==='voice' ? '🎵' : '🖼️', name: desc, pct: 15, tone:"tone-a"});
+      const thumb = img ? await shrink(img) : null;
+      projects.unshift({icon: type==='video' ? '🎬' : type==='voice' ? '🎵' : '🖼️', name: escapeHtml(desc), pct: img ? 100 : 15, tone:"tone-a", img: thumb});
       renderProjects();
+      if(thumb){ const g = loadGallery(); g.unshift({name: escapeHtml(desc), img: thumb}); saveGallery(g); renderPassby(true); }
       attachedFiles.push({name: `${label}: ${desc}`, size:'Reference', kind: type});
       renderFileChips();
       showToast(label + ' added to Continue creating — usable as input elsewhere');
-      if(img) showImage(img, desc);
+      if(img) showImage(thumb || img, desc);
     };
     if(type === 'image' && API_URL){
       api('/image',{prompt: desc})
@@ -1461,6 +1539,7 @@
       setTimeout(() => finish(null), 1500);   // video & voice: demo only
     }
   });
+  if('serviceWorker' in navigator){ window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {})); }
 </script>
 </body>
 </html>
