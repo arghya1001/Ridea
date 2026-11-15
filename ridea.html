@@ -1463,7 +1463,7 @@
   const FD = 3.2, FN = 4, FW = 540, FH = 720, SC = 1.5;   // SC = render scale: sharper canvas, same layout
   async function makeFilm(idea){
     const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(8,8,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgb(8,8,20);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
     ov.innerHTML = `<canvas width="${FW*SC}" height="${FH*SC}" style="width:min(100%,360px);aspect-ratio:3/4;border-radius:16px;background:#14142b"></canvas>
       <div id="fs" style="color:#cfc6ff;font:500 14px Inter,sans-serif;text-align:center;min-height:20px">Writing your story…</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button id="fp" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Play film</button>
@@ -1476,7 +1476,7 @@
     $('fc').onclick = () => { alive = false; if(wake) wake('x'); urls.forEach(u => URL.revokeObjectURL(u)); try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
     try{
       let scenes = null;
-      let sheet = ''; try{ const r0 = await api('/scenes', {idea}); scenes = r0.scenes; sheet = r0.sheet || ''; }catch(e){}
+      let sheet = '', subjects = []; try{ const r0 = await api('/scenes', {idea}); scenes = r0.scenes; sheet = r0.sheet || ''; subjects = r0.subjects || []; }catch(e){}
       if(!scenes || scenes.length < FN) scenes = [
         {caption:'Once, in a quiet corner of the world…', visual: idea + ', wide establishing shot at dawn'},
         {caption:'Something small began to stir.', visual: idea + ', a quiet close-up moment'},
@@ -1530,16 +1530,35 @@
         }catch(e){ return null; }finally{ clearTimeout(to); }
       };
       const imgs = []; let firstB64 = null, refB64 = null; const seed = 1 + Math.floor(Math.random()*999999);
-      const REFP = 'Keep exactly the same main character(s) as in the reference image: identical face, fur or skin, hair, clothing, colors, proportions and art style. New scene: ';
+      const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible. New scene: ';
+      const WIDE1 = 'Wide full-body shot, every subject completely visible head to toe, clearly separate and easy to tell apart, even natural light. ';
       const paintScene = async (i, sd) => {
-        const j = await api('/image', {prompt: (i > 0 && refB64 ? REFP : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
+        const j = await api('/image', {prompt: (i > 0 && refB64 ? REFP : i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
         if(i === 0) firstB64 = j.image;
         imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
         if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
       };
+      // consistency gate: a vision model checks every subject is really in each picture; failures are repainted automatically
+      const bad = new Set();
+      const checkImg = async i => {
+        if(!subjects.length) return {ok: true};
+        try{ const c = document.createElement('canvas'); c.width = 384; c.height = 512; c.getContext('2d').drawImage(imgs[i], 0, 0, 384, 512);
+          return await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects}); }catch(e){ return {ok: true}; }
+      };
+      const paintChecked = async (i, sd) => {
+        let r = {ok: true, missing: []};
+        for(let t = 0; t < 3 && alive; t++){
+          await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd);
+          st(`Checking scene ${i + 1} for consistency…`);
+          r = await checkImg(i);
+          if(r.ok){ bad.delete(i); return; }
+          if(t < 2) st(`Scene ${i + 1} failed the check (missing: ${(r.missing || []).join('; ')}). Repainting, try ${t + 2} of 3…`);
+        }
+        bad.add(i);
+      };
       for(let i = 0; i < FN && alive; i++){
         st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
-        await paintScene(i, seed);
+        await paintChecked(i, seed);
       }
       if(!alive) return;
       // ---- review step: look at the paintings first, repaint any you dislike, then choose motion or not ----
@@ -1555,11 +1574,11 @@
           if(busy) return; busy = true; bm.disabled = bs.disabled = true;
           const list = i === 0 ? [0, 1, 2, 3] : [i];   // repainting scene 1 changes the character, so the rest follow it
           try{
-            for(const k of list){ ths[k].style.opacity = .35; st(`Repainting scene ${k + 1}…`); await paintScene(k, 1 + Math.floor(Math.random()*999999)); ths[k].src = imgs[k].src; ths[k].style.opacity = 1; }
+            for(const k of list){ ths[k].style.opacity = .35; st(`Repainting scene ${k + 1}…`); await paintChecked(k, 1 + Math.floor(Math.random()*999999)); ths[k].src = imgs[k].src; ths[k].style.outline = bad.has(k) ? '3px solid #ff6b6b' : 'none'; ths[k].style.opacity = 1; }
           }catch(e){ list.forEach(k => ths[k].style.opacity = 1); }
           st('Tap a scene to repaint it. Happy with them? Choose below.'); busy = false; bm.disabled = bs.disabled = false;
         };
-        ths.forEach((t, i) => t.onclick = () => redo(i));
+        ths.forEach((t, i) => { t.onclick = () => redo(i); if(bad.has(i)) t.style.outline = '3px solid #ff6b6b'; });
         const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center';
         const gpu = document.createElement('div'); gpu.style.cssText = 'color:#cfc6ff;font:400 12px Inter,sans-serif;text-align:center;line-height:1.4';
         const bc = mk('Check AI motion GPU');
@@ -1571,7 +1590,7 @@
         bc.onclick = async () => { bc.disabled = true; gpu.textContent = 'Checking…'; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; }catch(e){ motion = false; } bc.disabled = false; showGpu(); };
         if(motion) row.appendChild(bm); else row.appendChild(bc); row.appendChild(bs); rv.append(grid, gpu, row); showGpu();
         cv.style.display = 'none'; cv.after(rv);
-        st('Tap a scene to repaint it. Happy with them? Choose below.');
+        st(bad.size ? 'Red-outlined scenes still failed the consistency check. Tap them to repaint.' : 'All scenes passed the consistency check. Tap one to repaint it, or choose below.');
         const done = c => { rv.remove(); cv.style.display = ''; wake = null; resolve(c); };
         bm.onclick = () => done('motion'); bs.onclick = () => done('still');
       });
