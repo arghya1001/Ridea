@@ -1503,7 +1503,7 @@
       });
       if(!alive) return;
       // AI motion (optional): the Worker routes to free GPU providers; any failure just keeps the free storybook look
-      let motion = false; try{ motion = (await api('/video-status', {})).available === true; }catch(e){}
+      let motion = false, clipsLeft = null, gpus = 0; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; }catch(e){}
       const clips = [];
       const toClip = async (i, im) => {
         const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 1500000);   // free GPUs render one clip at a time, so allow a long wait
@@ -1561,7 +1561,15 @@
         };
         ths.forEach((t, i) => t.onclick = () => redo(i));
         const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center';
-        if(motion) row.appendChild(bm); row.appendChild(bs); rv.append(grid, row);
+        const gpu = document.createElement('div'); gpu.style.cssText = 'color:#cfc6ff;font:400 12px Inter,sans-serif;text-align:center;line-height:1.4';
+        const bc = mk('Check AI motion GPU');
+        const showGpu = () => {
+          gpu.textContent = motion ? 'AI motion GPU is online ✓' : (gpus > 0 && clipsLeft === 0 ? 'Daily AI-motion limit reached for today. Try again tomorrow.' : 'AI motion GPU is offline. Start the Kaggle notebook, wait for READY, then tap Check.');
+          bs.textContent = motion ? 'Make film without motion' : 'Make film';
+          if(motion){ if(!bm.isConnected) row.insertBefore(bm, row.firstChild); bc.remove(); }
+        };
+        bc.onclick = async () => { bc.disabled = true; gpu.textContent = 'Checking…'; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; }catch(e){ motion = false; } bc.disabled = false; showGpu(); };
+        if(motion) row.appendChild(bm); else row.appendChild(bc); row.appendChild(bs); rv.append(grid, gpu, row); showGpu();
         cv.style.display = 'none'; cv.after(rv);
         st('Tap a scene to repaint it. Happy with them? Choose below.');
         const done = c => { rv.remove(); cv.style.display = ''; wake = null; resolve(c); };

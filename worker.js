@@ -11,7 +11,7 @@ const DIRECTOR_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"; // smarter "f
 // quietly falls back to the free storybook. Flow:  app -> /video (submit) -> /video-result (poll).
 // Needs: a KV namespace bound as RIDEA_KV, and a secret named RIDEA_TOKEN (any password).
 const PROVIDERS = ["KAGGLE", "COLAB"];     // names the notebook uses (it picks automatically)
-const DEFAULT_CLIPS_PER_USER_DAY = 8;      // 8 clips = 2 films per person per day
+const DEFAULT_CLIPS_PER_USER_DAY = 40;     // 40 clips = 10 films per person per day (the GPU is yours, so this is generous)
 
 const coolMem = new Map();                 // fallback cooldown when KV is slow
 const dayKey = () => new Date().toISOString().slice(0, 10);
@@ -142,13 +142,13 @@ export default {
         const sys = `You are an award-winning film director and screenwriter. The user gives a very short idea. Work out what they really want, then plan a 4-scene mini film (13 seconds) with a clear beginning, middle and end.
 Reply with ONLY one JSON object: {"sheet": "...", "scenes": [{"caption": "...", "visual": "...", "motion": "..."}, ...4 items]}.
 "sheet": one paragraph of 40-70 words describing every main subject in precise visual detail (species or age, colors, clothing, distinctive features) and the single setting and time of day.
-Each scene: "caption" = warm narration, max 12 words. "visual" = 45-60 words for an image generator: restate the subject details from the sheet word for word, then give the shot type (wide or medium only), camera angle, lighting, emotion and ONE simple natural action. No text in the image. "motion" = 6-14 words of tiny natural movement only.
-Rules: EVERY scene must show ALL subjects named in the idea together, fully visible, doing exactly what the idea says (for example if a baby rides a lion, the baby sits on the back of the lion in every scene). Never hide, crop out or replace a subject, and add no new main characters. Show story progress through mood, light and place (arrival, discovery, joyful peak, gentle ending). In the motion line nobody turns around, walks, runs, jumps or leaves the frame, nothing new appears, and the camera barely moves.`;
+Each scene: "caption" = one complete warm narration sentence of 6-12 words that tells what happens (never a label like "Arrival" or "Gentle ending"). "visual" = 45-60 words for an image generator: restate the subject details from the sheet word for word, then give the shot type (wide or medium only), camera angle, lighting, emotion and ONE simple natural action. No text in the image. "motion" = 12-22 words of lively but natural movement that fits the scene, for example: the lion walks slowly forward with calm steady steps while the baby stays seated on its back, smiles and looks up at the trees and birds, leaves sway in the wind.
+Rules: EVERY scene must show ALL subjects named in the idea together, fully visible, doing exactly what the idea says (for example if a baby rides a lion, the baby sits on the back of the lion in every scene). Never hide, crop out or replace a subject, and add no new main characters. The 4 scenes must NOT look alike: change the shot type (for example wide establishing, medium, low angle, close two-shot), the camera angle, the part of the setting (path, river, clearing, hilltop) and the light (morning mist, midday sun, golden hour, dusk) from scene to scene, while the subjects keep exactly the same look. Show story progress this way. In the motion line everyone stays in the frame and together (a rider always stays seated), nobody turns their back to the camera, runs, jumps or falls, no new main subject appears (only leaves, birds and light in the background), and the camera follows gently.`;
         const run = async model => {
           const out = await env.AI.run(model, { max_tokens: 1800, messages: [{ role: "system", content: sys }, { role: "user", content: `Idea: ${idea}` }] });
           const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
           const obj = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
-          const scenes = (obj.scenes || []).slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 520), motion: String(x.motion || "").slice(0, 120) }));
+          const scenes = (obj.scenes || []).slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 520), motion: String(x.motion || "").slice(0, 200) }));
           if (scenes.length < 4) throw new Error("bad scenes");
           return { scenes, sheet: String(obj.sheet || "").slice(0, 600) };
         };
