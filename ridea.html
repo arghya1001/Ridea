@@ -1462,12 +1462,13 @@
     ov.innerHTML = `<canvas width="${FW}" height="${FH}" style="width:min(100%,360px);aspect-ratio:3/4;border-radius:16px;background:#14142b"></canvas>
       <div id="fs" style="color:#cfc6ff;font:500 14px Inter,sans-serif;text-align:center;min-height:20px">Writing your story…</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button id="fp" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Play film</button>
+      <button id="fk" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Skip motion</button>
       <a id="fd" class="generate-btn" style="display:none;text-decoration:none;padding:12px 20px;border-radius:12px">Download</a>
       <button id="fc" class="generate-btn" style="padding:12px 20px;border-radius:12px">Close</button></div>`;
     document.body.appendChild(ov);
     const $ = id => ov.querySelector('#' + id), cv = ov.querySelector('canvas'), cx = cv.getContext('2d'), st = t => { $('fs').textContent = t; };
-    let alive = true, rec = null;
-    $('fc').onclick = () => { alive = false; try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
+    let alive = true, rec = null; const urls = [], vids = [];
+    $('fc').onclick = () => { alive = false; urls.forEach(u => URL.revokeObjectURL(u)); try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
     try{
       let scenes = null;
       try{ scenes = (await api('/scenes', {idea})).scenes; }catch(e){}
@@ -1477,14 +1478,43 @@
         {caption:'And then, a little magic appeared.', visual: idea + ', a magical surprise, glowing light'},
         {caption:'And everything felt right.', visual: idea + ', warm golden ending, hopeful'}];
       scenes = scenes.slice(0, FN);
+      // AI motion (optional): the Worker routes to free GPU providers; any failure just keeps the free storybook look
+      let motion = false; try{ motion = (await api('/video-status', {})).available === true; }catch(e){}
+      const clips = [];
+      const toClip = async (i, im) => {
+        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 170000);
+        try{
+          const c = document.createElement('canvas'); c.width = 480; c.height = 640;   // same 3:4 crop the film shows
+          const k = Math.max(480/im.width, 640/im.height);
+          c.getContext('2d').drawImage(im, (480 - im.width*k)/2, (640 - im.height*k)/2, im.width*k, im.height*k);
+          const r = await fetch(API_URL + '/video', {method:'POST', headers:{'Content-Type':'application/json'}, signal: ctl.signal,
+            body: JSON.stringify({image: c.toDataURL('image/jpeg', .88).split(',')[1], prompt: scenes[i].visual})});
+          if(!r.ok || !(r.headers.get('Content-Type') || '').includes('video')) return null;
+          const url = URL.createObjectURL(await r.blob()); urls.push(url);
+          const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+          v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none'; ov.appendChild(v);
+          await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; });
+          return v;
+        }catch(e){ return null; }finally{ clearTimeout(to); }
+      };
       const imgs = []; let firstB64 = null;
       for(let i = 0; i < FN && alive; i++){
-        st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
+        st(`Painting scene ${i + 1} of ${FN}… ` + (motion ? '(AI motion on)' : '(about 15 seconds each)'));
         const j = await api('/image', {prompt: styled(scenes[i].visual)});
         if(i === 0) firstB64 = j.image;
         imgs.push(await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; }));
+        if(motion) clips[i] = toClip(i, imgs[i]);   // starts rendering now, while the next scene is painted
       }
       if(!alive) return;
+      if(motion){
+        let done = 0, skip; const skipP = new Promise(r => skip = r), fk = $('fk');
+        const upd = () => st(`Adding AI motion… ${done} of ${FN} ready (up to 2 min)`);
+        upd(); fk.style.display = ''; fk.onclick = () => skip();
+        clips.forEach((p, i) => p.then(v => { vids[i] = v; done++; if(alive && fk.style.display === '') upd(); }));
+        await Promise.race([Promise.all(clips), skipP, new Promise(r => setTimeout(r, 150000))]);
+        fk.style.display = 'none';
+        if(!alive) return;
+      }
       try{
         const cover = await shrink('data:image/png;base64,' + firstB64), nm = escapeHtml(('Film: ' + idea).length > 28 ? ('Film: ' + idea).slice(0, 28).trim() + '…' : 'Film: ' + idea);
         const g = loadGallery(); g.unshift({name: nm, img: cover}); saveGallery(g); renderPassby(true);
@@ -1493,15 +1523,17 @@
       const glows = imgs.map(im => { const c = document.createElement('canvas'); c.width = 160; c.height = Math.round(160*im.height/im.width); const g = c.getContext('2d'); try{ g.filter = 'blur(2px) brightness(1.7) contrast(1.3)'; }catch(e){} g.drawImage(im, 0, 0, c.width, c.height); return c; });
       const parts = Array.from({length: 36}, () => ({x: Math.random()*FW, y: Math.random()*FH, r: 1 + Math.random()*2.5, v: 8 + Math.random()*18, p: Math.random()*6}));
       const wrap = (s2, mw) => { const out = []; let l = ''; s2.split(' ').forEach(w => { const t2 = l ? l + ' ' + w : w; if(cx.measureText(t2).width > mw && l){ out.push(l); l = w; } else l = t2; }); out.push(l); return out; };
+      const src = i => (vids[i] && vids[i].readyState >= 2) ? vids[i] : imgs[i];   // AI clip if ready, else painted still
       const scene = (img, p, i, a, t) => {
-        const z = i % 2 ? 1.22 - .14*p : 1.08 + .14*p, dx = (i % 3 - 1) * 26 * (p - .5), dy = -14*p;
-        const k = Math.max(FW/img.width, FH/img.height) * z, w = img.width*k, h = img.height*k, x0 = (FW - w)/2 + dx, y0 = (FH - h)/2 + dy;
-        const N = 48, sh = img.height/N, dh = h/N;
+        const isV = !!img.videoWidth, iw = img.videoWidth || img.width, ih = img.videoHeight || img.height;
+        const z = isV ? 1.04 : (i % 2 ? 1.22 - .14*p : 1.08 + .14*p), dx = isV ? 0 : (i % 3 - 1) * 26 * (p - .5), dy = isV ? 0 : -14*p;
+        const k = Math.max(FW/iw, FH/ih) * z, w = iw*k, h = ih*k, x0 = (FW - w)/2 + dx, y0 = (FH - h)/2 + dy;
+        const N = isV ? 1 : 48, sh = ih/N, dh = h/N;
         cx.globalAlpha = a;
         for(let n = 0; n < N; n++){            // draw in thin strips so the picture ripples like wind
           const y01 = n/N, sky = Math.max(0, .45 - y01)/.45;
-          const off = Math.sin(t*.9 + n*.35 + i)*(4 + 10*y01) + sky*Math.sin(t*.35 + i)*28;   // trees/grass sway, sky drifts
-          cx.drawImage(img, 0, n*sh, img.width, sh + 1, x0 + off, y0 + n*dh, w, dh + 1);
+          const off = isV ? 0 : Math.sin(t*.9 + n*.35 + i)*(4 + 10*y01) + sky*Math.sin(t*.35 + i)*28;   // trees/grass sway, sky drifts
+          cx.drawImage(img, 0, n*sh, iw, sh + 1, x0 + off, y0 + n*dh, w, dh + 1);
         }
         cx.globalAlpha = 1;
       };
@@ -1509,8 +1541,8 @@
         const i = Math.min(FN - 1, Math.floor(t/FD)), lt = Math.min(FD, t - i*FD), p = lt/FD;
         cx.clearRect(0, 0, FW, FH);
         const fade = i > 0 ? Math.min(1, lt/.6) : 1;
-        if(i > 0 && lt < .6) scene(imgs[i-1], 1, i-1, 1, t);
-        scene(imgs[i], p, i, fade, t);
+        if(i > 0 && lt < .6) scene(src(i-1), 1, i-1, 1, t);
+        scene(src(i), p, i, fade, t);
         cx.globalCompositeOperation = 'screen'; scene(glows[i], p, i, (.14 + .08*Math.sin(t*2.2))*fade, t); cx.globalCompositeOperation = 'source-over';   // lantern/light glow pulse
         for(let n = 0; n < 3; n++){            // drifting mist over the sky
           const x = ((t*(10 + n*6) + n*220) % (FW + 400)) - 200, y = 70 + n*95;
@@ -1529,7 +1561,7 @@
       };
       frame(0); st('Ready — tap Play. Narration plays aloud; the saved video has music.'); $('fp').style.display = '';
       $('fp').onclick = () => {
-        $('fp').style.display = 'none'; $('fd').style.display = 'none'; cv.style.display = ''; const oldV = ov.querySelector('video'); if(oldV) oldV.remove();
+        $('fp').style.display = 'none'; $('fd').style.display = 'none'; cv.style.display = ''; const oldV = ov.querySelector('video[controls]'); if(oldV) oldV.remove();   // only the saved result, never the hidden AI clips
         const total = FD*FN, ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination(), gain = ac.createGain(), now = ac.currentTime;
         gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(.06, now + 1.2); gain.gain.setValueAtTime(.06, now + total - 1.5); gain.gain.linearRampToValueAtTime(0, now + total);
         [220, 277.18, 329.63, 440].forEach(f => { const o = ac.createOscillator(); o.frequency.value = f; o.connect(gain); o.start(); o.stop(now + total + .2); });
@@ -1554,7 +1586,7 @@
           const t = (performance.now() - t0)/1000;
           if(t >= total){ frame(total - .01); if(rec && rec.state !== 'inactive') rec.stop(); $('fp').textContent = 'Play again'; $('fp').style.display = ''; st('Done — tap Download to keep your film'); return; }
           const i = Math.floor(t/FD);
-          if(i !== last){ last = i; try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(scenes[i].caption); u.rate = .92; speechSynthesis.speak(u); }catch(e){} }
+          if(i !== last){ last = i; if(vids[i]){ try{ vids[i].currentTime = 0; vids[i].play().catch(() => {}); }catch(e){} } try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(scenes[i].caption); u.rate = .92; speechSynthesis.speak(u); }catch(e){} }
           frame(t); requestAnimationFrame(tick);
         };
         st('Playing…'); tick();
