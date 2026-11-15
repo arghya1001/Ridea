@@ -1472,17 +1472,36 @@
       <button id="fc" class="generate-btn" style="padding:12px 20px;border-radius:12px">Close</button></div>`;
     document.body.appendChild(ov);
     const $ = id => ov.querySelector('#' + id), cv = ov.querySelector('canvas'), cx = cv.getContext('2d'), st = t => { $('fs').textContent = t; };
-    let alive = true, rec = null; const urls = [], vids = [], fx = styleKey === 'anime';   // wobble/glow/mist only suit the painted anime look
-    $('fc').onclick = () => { alive = false; urls.forEach(u => URL.revokeObjectURL(u)); try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
+    let alive = true, rec = null, wake = null; const urls = [], vids = [], fx = styleKey === 'anime';   // wobble/glow/mist only suit the painted anime look
+    $('fc').onclick = () => { alive = false; if(wake) wake('x'); urls.forEach(u => URL.revokeObjectURL(u)); try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
     try{
       let scenes = null;
-      try{ scenes = (await api('/scenes', {idea})).scenes; }catch(e){}
+      let sheet = ''; try{ const r0 = await api('/scenes', {idea}); scenes = r0.scenes; sheet = r0.sheet || ''; }catch(e){}
       if(!scenes || scenes.length < FN) scenes = [
         {caption:'Once, in a quiet corner of the world…', visual: idea + ', wide establishing shot at dawn'},
         {caption:'Something small began to stir.', visual: idea + ', a quiet close-up moment'},
         {caption:'And then, a little magic appeared.', visual: idea + ', a magical surprise, glowing light'},
         {caption:'And everything felt right.', visual: idea + ', warm golden ending, hopeful'}];
       scenes = scenes.slice(0, FN);
+      // ---- plan review: the AI director's plan, editable, before any picture is painted ----
+      await new Promise(resolve => {
+        wake = resolve;
+        const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:min(100%,420px);max-height:70vh;overflow:auto';
+        const tax = 'width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;font:400 13px Inter,sans-serif;padding:8px;resize:vertical';
+        if(sheet){ const n = document.createElement('div'); n.textContent = 'Characters & setting: ' + sheet; n.style.cssText = 'color:#cfc6ff;font:400 12px Inter,sans-serif;line-height:1.4'; rv.appendChild(n); }
+        const caps = [], viss = [];
+        scenes.forEach((sc, i) => {
+          const h = document.createElement('div'); h.textContent = 'Scene ' + (i + 1); h.style.cssText = 'color:#fff;font:600 13px Inter,sans-serif;margin-top:4px';
+          const c1 = document.createElement('textarea'); c1.rows = 1; c1.value = sc.caption; c1.style.cssText = tax;
+          const v1 = document.createElement('textarea'); v1.rows = 4; v1.value = sc.visual; v1.style.cssText = tax;
+          caps.push(c1); viss.push(v1); rv.append(h, c1, v1);
+        });
+        const go = document.createElement('button'); go.className = 'generate-btn'; go.textContent = 'Paint these scenes'; go.style.cssText = 'padding:12px 20px;border-radius:12px;align-self:center;margin-top:6px';
+        rv.appendChild(go); cv.style.display = 'none'; cv.after(rv);
+        st('Your idea, planned by the AI director. Edit anything you like, then paint.');
+        go.onclick = () => { scenes.forEach((sc, i) => { sc.caption = caps[i].value.trim() || sc.caption; sc.visual = viss[i].value.trim() || sc.visual; }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
+      });
+      if(!alive) return;
       // AI motion (optional): the Worker routes to free GPU providers; any failure just keeps the free storybook look
       let motion = false; try{ motion = (await api('/video-status', {})).available === true; }catch(e){}
       const clips = [];
@@ -1512,14 +1531,45 @@
       };
       const imgs = []; let firstB64 = null, refB64 = null; const seed = 1 + Math.floor(Math.random()*999999);
       const REFP = 'Keep exactly the same main character(s) as in the reference image: identical face, fur or skin, hair, clothing, colors, proportions and art style. New scene: ';
-      for(let i = 0; i < FN && alive; i++){
-        st(`Painting scene ${i + 1} of ${FN}… ` + (motion ? '(AI motion on)' : '(about 15 seconds each)'));
-        const j = await api('/image', {prompt: (i > 0 && refB64 ? REFP : '') + styled(scenes[i].visual), w: 768, h: 1024, seed, ref: i > 0 ? refB64 || undefined : undefined});
+      const paintScene = async (i, sd) => {
+        const j = await api('/image', {prompt: (i > 0 && refB64 ? REFP : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
         if(i === 0) firstB64 = j.image;
-        imgs.push(await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; }));
+        imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
         if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
-        if(motion) clips[i] = toClip(i, imgs[i]);   // starts rendering now, while the next scene is painted
+      };
+      for(let i = 0; i < FN && alive; i++){
+        st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
+        await paintScene(i, seed);
       }
+      if(!alive) return;
+      // ---- review step: look at the paintings first, repaint any you dislike, then choose motion or not ----
+      const choice = await new Promise(resolve => {
+        wake = resolve;
+        const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;width:min(100%,360px)';
+        const grid = document.createElement('div'); grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%';
+        const ths = imgs.map((im, i) => { const t = document.createElement('img'); t.src = im.src; t.style.cssText = 'width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;cursor:pointer;transition:opacity .2s'; t.title = 'Tap to repaint scene ' + (i + 1); grid.appendChild(t); return t; });
+        const mk = (txt) => { const b = document.createElement('button'); b.className = 'generate-btn'; b.textContent = txt; b.style.cssText = 'padding:12px 20px;border-radius:12px'; return b; };
+        const bm = mk('Add AI motion (about 5 min)'), bs = mk(motion ? 'Make film without motion' : 'Make film');
+        let busy = false;
+        const redo = async i => {
+          if(busy) return; busy = true; bm.disabled = bs.disabled = true;
+          const list = i === 0 ? [0, 1, 2, 3] : [i];   // repainting scene 1 changes the character, so the rest follow it
+          try{
+            for(const k of list){ ths[k].style.opacity = .35; st(`Repainting scene ${k + 1}…`); await paintScene(k, 1 + Math.floor(Math.random()*999999)); ths[k].src = imgs[k].src; ths[k].style.opacity = 1; }
+          }catch(e){ list.forEach(k => ths[k].style.opacity = 1); }
+          st('Tap a scene to repaint it. Happy with them? Choose below.'); busy = false; bm.disabled = bs.disabled = false;
+        };
+        ths.forEach((t, i) => t.onclick = () => redo(i));
+        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center';
+        if(motion) row.appendChild(bm); row.appendChild(bs); rv.append(grid, row);
+        cv.style.display = 'none'; cv.after(rv);
+        st('Tap a scene to repaint it. Happy with them? Choose below.');
+        const done = c => { rv.remove(); cv.style.display = ''; wake = null; resolve(c); };
+        bm.onclick = () => done('motion'); bs.onclick = () => done('still');
+      });
+      if(!alive) return;
+      if(choice === 'motion') imgs.forEach((im, i) => { clips[i] = toClip(i, im); });
+      else motion = false;
       if(!alive) return;
       if(motion){
         let done = 0, skip; const skipP = new Promise(r => skip = r), fk = $('fk');
@@ -1529,6 +1579,29 @@
         await Promise.race([Promise.all(clips), skipP, new Promise(r => setTimeout(r, 1500000))]);
         fk.style.display = 'none';
         if(!alive) return;
+        if(vids.some(Boolean)){   // review the AI clips: keep the good ones, switch a bad one back to the still, or re-render it
+          await new Promise(resolve => {
+            wake = resolve; const use = [0, 1, 2, 3].map(i => !!vids[i]);
+            const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;width:min(100%,360px)';
+            const grid = document.createElement('div'); grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%';
+            const mkb = (t, f) => { const bt = document.createElement('button'); bt.textContent = t; bt.style.cssText = 'padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:500 12px Inter,sans-serif;cursor:pointer'; bt.onclick = f; return bt; };
+            [0, 1, 2, 3].forEach(i => {
+              const box = document.createElement('div'); box.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:center';
+              const pv = document.createElement('video'); pv.muted = true; pv.loop = true; pv.playsInline = true; pv.autoplay = true; pv.style.cssText = 'width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;cursor:pointer;transition:opacity .2s';
+              if(vids[i]){ pv.src = vids[i].src; pv.play().catch(() => {}); } else pv.poster = imgs[i].src;
+              const lab = document.createElement('div'); lab.style.cssText = 'color:#cfc6ff;font:500 12px Inter,sans-serif';
+              const paint = () => { pv.style.opacity = use[i] ? 1 : .35; lab.textContent = 'Scene ' + (i + 1) + ': ' + (!vids[i] ? 'no clip (still)' : use[i] ? 'AI motion ✓' : 'still'); };
+              pv.onclick = () => { if(vids[i]){ use[i] = !use[i]; paint(); } };
+              const rd = mkb('Redo motion', async () => { rd.disabled = true; lab.textContent = 'Scene ' + (i + 1) + ': re-rendering (~1-2 min)…'; const v = await toClip(i, imgs[i]); if(v){ vids[i] = v; pv.src = v.src; pv.play().catch(() => {}); use[i] = true; } paint(); rd.disabled = false; });
+              paint(); box.append(pv, lab, rd); grid.appendChild(box);
+            });
+            const go = document.createElement('button'); go.className = 'generate-btn'; go.textContent = 'Make film'; go.style.cssText = 'padding:12px 20px;border-radius:12px';
+            rv.append(grid, go); cv.style.display = 'none'; cv.after(rv);
+            st('Tap a clip to switch it to the still picture if it looks wrong, or redo it. Then tap Make film.');
+            go.onclick = () => { use.forEach((u, i) => { if(!u) vids[i] = null; }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
+          });
+          if(!alive) return;
+        }
       }
       try{
         const cover = await shrink('data:image/png;base64,' + firstB64), nm = escapeHtml(('Film: ' + idea).length > 28 ? ('Film: ' + idea).slice(0, 28).trim() + '…' : 'Film: ' + idea);

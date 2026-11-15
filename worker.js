@@ -3,6 +3,7 @@
 const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";          // fallback
 const REF_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";           // accepts reference images -> consistent characters
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"; // change if Cloudflare retires it
+const DIRECTOR_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"; // smarter "film director" for /scenes; falls back to TEXT_MODEL
 
 // ---- AI video (free GPUs: Kaggle / Colab notebooks, no credit card) ---------------
 // A free GPU notebook (ridea_video_worker.ipynb) runs LTX-Video and registers its public
@@ -136,20 +137,24 @@ export default {
         return send({ lines });
       }
       if (path === "/scenes") {
-        const idea = String(body.idea || "").slice(0, 200);
+        const idea = String(body.idea || "").slice(0, 300);
         if (!idea) return send({ error: "Describe your film idea first" }, 400);
-        const out = await env.AI.run(TEXT_MODEL, {
-          max_tokens: 1400,
-          messages: [
-            { role: "system", content: 'You write 4-scene mini stories for a 13-second film. Reply with ONLY a JSON array of exactly 4 objects: {"caption": warm narration, max 12 words, "motion": 6-14 words describing ONLY a gentle natural movement for animating this picture (e.g. the lion slowly turns its head while its mane sways), "visual": a self-contained photo-director prompt, 45-60 words, no text in the image}. Invent ONE main character set (age, clothing colors, hair, distinctive features) and ONE setting, and repeat that exact same description word-for-word in every visual so the characters look identical in all 4 scenes. Each visual must also name a shot type (wide / medium / close-up), a camera angle, the lighting, and one simple natural action. No other text.' },
-            { role: "user", content: `Story idea: ${idea}` },
-          ],
-        });
-        const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
-        const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
-        const scenes = arr.slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 420), motion: String(x.motion || "").slice(0, 120) }));
-        if (scenes.length < 4) throw new Error("bad scenes");
-        return send({ scenes });
+        const sys = `You are an award-winning film director and screenwriter. The user gives a very short idea. Work out what they really want, then plan a 4-scene mini film (13 seconds) with a clear beginning, middle and end.
+Reply with ONLY one JSON object: {"sheet": "...", "scenes": [{"caption": "...", "visual": "...", "motion": "..."}, ...4 items]}.
+"sheet": one paragraph of 40-70 words describing every main subject in precise visual detail (species or age, colors, clothing, distinctive features) and the single setting and time of day.
+Each scene: "caption" = warm narration, max 12 words. "visual" = 45-60 words for an image generator: restate the subject details from the sheet word for word, then give the shot type (wide or medium only), camera angle, lighting, emotion and ONE simple natural action. No text in the image. "motion" = 6-14 words of tiny natural movement only.
+Rules: EVERY scene must show ALL subjects named in the idea together, fully visible, doing exactly what the idea says (for example if a baby rides a lion, the baby sits on the back of the lion in every scene). Never hide, crop out or replace a subject, and add no new main characters. Show story progress through mood, light and place (arrival, discovery, joyful peak, gentle ending). In the motion line nobody turns around, walks, runs, jumps or leaves the frame, nothing new appears, and the camera barely moves.`;
+        const run = async model => {
+          const out = await env.AI.run(model, { max_tokens: 1800, messages: [{ role: "system", content: sys }, { role: "user", content: `Idea: ${idea}` }] });
+          const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
+          const obj = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+          const scenes = (obj.scenes || []).slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 520), motion: String(x.motion || "").slice(0, 120) }));
+          if (scenes.length < 4) throw new Error("bad scenes");
+          return { scenes, sheet: String(obj.sheet || "").slice(0, 600) };
+        };
+        let res;
+        try { res = await run(DIRECTOR_MODEL); } catch (e) { res = await run(TEXT_MODEL); }
+        return send(res);
       }
       if (path === "/video-status") {
         const cap = parseInt(env.CLIPS_PER_USER_DAY) || DEFAULT_CLIPS_PER_USER_DAY;
