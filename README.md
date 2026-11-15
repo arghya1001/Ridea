@@ -19,3 +19,5 @@ Push `ridea.html` to a repo → Settings → Pages → deploy from `main` / root
 - Cost: 0. Workers AI gives 10,000 neurons/day free; on the Free plan it errors out past that, it does not bill.
 - Real now: Image and Script concept ideas. Video and Voice are still demo.
 - Test locally: `python3 -m http.server 8000` (localhost:8000 is allowed by the Worker).
+
+ 
