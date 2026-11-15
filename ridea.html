@@ -428,10 +428,10 @@
 .pb-track{display:flex;gap:14px;width:max-content;padding:0 14px}
 .pb-track.run{animation:pbmove 45s linear infinite}
 .passby:hover .pb-track.run,.passby:active .pb-track.run{animation-play-state:paused}
-@keyframes pbmove{to{transform:translateX(calc(-50% - 7px))}}
+@keyframes pbmove{from{transform:translateX(calc(-50% - 7px))}to{transform:translateX(0)}}
 .pb-card{flex:none;width:116px;height:150px;border-radius:18px;position:relative;overflow:hidden;border:1px solid rgba(255,255,255,.14);padding:0;background:var(--ink-850);cursor:pointer;box-shadow:0 10px 30px -14px rgba(139,124,255,.55)}
 .pb-card img{width:100%;height:100%;object-fit:cover;display:block}
-.pb-card span{position:absolute;left:0;right:0;bottom:0;padding:22px 10px 9px;font:600 12px Inter,sans-serif;color:#f6f3ec;text-align:left;background:linear-gradient(0deg,rgba(11,11,26,.88),transparent)}
+.pb-card span{position:absolute;left:0;right:0;bottom:0;padding:22px 10px 9px;font:600 12px Inter,sans-serif;color:#f6f3ec;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;background:linear-gradient(0deg,rgba(11,11,26,.88),transparent)}
 .pb-card.is-char{border-color:#e3bc74;box-shadow:0 0 0 2px rgba(227,188,116,.35)}
 .pb-card.arrive{animation:pbin .9s cubic-bezier(.2,.8,.2,1) both,pbglow 2.4s ease-out}
 .pb-card.ph{cursor:default;background:linear-gradient(160deg,#3a3470,#14142b)}
@@ -1430,7 +1430,6 @@
     o.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.8);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px';
     o.innerHTML = `<img src="${src}" alt="${escapeHtml(prompt)}" style="max-width:100%;max-height:70vh;border-radius:12px">
       <div style="display:flex;gap:10px"><a href="${src}" download="ridea-${Date.now()}.${src.startsWith('data:image/jpeg') ? 'jpg' : 'png'}" class="generate-btn" style="text-decoration:none;padding:10px 18px;border-radius:10px">Download</a>
-      <button data-char class="generate-btn" style="padding:10px 18px;border-radius:10px">Save as character</button>
       <button class="generate-btn" style="padding:10px 18px;border-radius:10px">Close</button></div>`;
     o.addEventListener('click', e => {
       if(e.target.hasAttribute && e.target.hasAttribute('data-char')){
@@ -1443,12 +1442,103 @@
     document.body.appendChild(o);
   }
 
+  // ---- Dreamy anime style + 13-second Motion Storybook ----
+  const STYLE = ', hand-painted anime fantasy illustration, soft watercolor sky, lush detail, warm gentle light';
+  let dreamy = true; try{ dreamy = localStorage.getItem('ridea-dreamy') !== '0'; }catch(e){}
+  const styled = p => dreamy ? p + STYLE : p;
+  (function(){
+    const row = document.querySelector('.quick-row'); if(!row) return;
+    const b = document.createElement('button'); b.type = 'button';
+    b.style.cssText = 'margin:0 0 10px;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--paper);font:500 13px Inter,sans-serif;cursor:pointer';
+    const paint = () => { b.textContent = 'Dreamy anime style: ' + (dreamy ? 'on' : 'off'); b.style.borderColor = dreamy ? '#a99bff' : 'rgba(255,255,255,.16)'; };
+    b.onclick = () => { dreamy = !dreamy; try{ localStorage.setItem('ridea-dreamy', dreamy ? '1' : '0'); }catch(e){} paint(); };
+    paint(); row.parentNode.insertBefore(b, row);
+  })();
+
+  const FD = 3.2, FN = 4, FW = 540, FH = 720;
+  async function makeFilm(idea){
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(8,8,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
+    ov.innerHTML = `<canvas width="${FW}" height="${FH}" style="width:min(100%,360px);aspect-ratio:3/4;border-radius:16px;background:#14142b"></canvas>
+      <div id="fs" style="color:#cfc6ff;font:500 14px Inter,sans-serif;text-align:center;min-height:20px">Writing your story…</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button id="fp" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Play film</button>
+      <a id="fd" class="generate-btn" style="display:none;text-decoration:none;padding:12px 20px;border-radius:12px">Download</a>
+      <button id="fc" class="generate-btn" style="padding:12px 20px;border-radius:12px">Close</button></div>`;
+    document.body.appendChild(ov);
+    const $ = id => ov.querySelector('#' + id), cv = ov.querySelector('canvas'), cx = cv.getContext('2d'), st = t => { $('fs').textContent = t; };
+    let alive = true, rec = null;
+    $('fc').onclick = () => { alive = false; try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
+    try{
+      let scenes = null;
+      try{ scenes = (await api('/scenes', {idea})).scenes; }catch(e){}
+      if(!scenes || scenes.length < FN) scenes = [
+        {caption:'Once, in a quiet corner of the world…', visual: idea + ', wide establishing shot at dawn'},
+        {caption:'Something small began to stir.', visual: idea + ', a quiet close-up moment'},
+        {caption:'And then, a little magic appeared.', visual: idea + ', a magical surprise, glowing light'},
+        {caption:'And everything felt right.', visual: idea + ', warm golden ending, hopeful'}];
+      scenes = scenes.slice(0, FN);
+      const imgs = [];
+      for(let i = 0; i < FN && alive; i++){
+        st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
+        const j = await api('/image', {prompt: styled(scenes[i].visual)});
+        imgs.push(await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; }));
+      }
+      if(!alive) return;
+      const parts = Array.from({length: 36}, () => ({x: Math.random()*FW, y: Math.random()*FH, r: 1 + Math.random()*2.5, v: 8 + Math.random()*18, p: Math.random()*6}));
+      const wrap = (s2, mw) => { const out = []; let l = ''; s2.split(' ').forEach(w => { const t2 = l ? l + ' ' + w : w; if(cx.measureText(t2).width > mw && l){ out.push(l); l = w; } else l = t2; }); out.push(l); return out; };
+      const scene = (img, p, i, a) => {
+        const z = i % 2 ? 1.22 - .14*p : 1.08 + .14*p, dx = (i % 3 - 1) * 26 * (p - .5), dy = -14*p;
+        const k = Math.max(FW/img.width, FH/img.height) * z, w = img.width*k, h = img.height*k;
+        cx.globalAlpha = a; cx.drawImage(img, (FW - w)/2 + dx, (FH - h)/2 + dy, w, h); cx.globalAlpha = 1;
+      };
+      const frame = t => {
+        const i = Math.min(FN - 1, Math.floor(t/FD)), lt = Math.min(FD, t - i*FD), p = lt/FD;
+        cx.clearRect(0, 0, FW, FH);
+        if(i > 0 && lt < .6) scene(imgs[i-1], 1, i-1, 1);
+        scene(imgs[i], p, i, i > 0 ? Math.min(1, lt/.6) : 1);
+        const g = cx.createLinearGradient(0, 0, FW, FH*.7); g.addColorStop(0, `rgba(255,230,170,${.10 + .05*Math.sin(t*1.3)})`); g.addColorStop(.5, 'rgba(255,230,170,0)');
+        cx.fillStyle = g; cx.fillRect(0, 0, FW, FH);
+        cx.globalCompositeOperation = 'lighter';
+        parts.forEach(q => { const y = (q.y - q.v*t) % FH; cx.fillStyle = `rgba(255,226,160,${.25 + .2*Math.sin(t*2 + q.p)})`; cx.beginPath(); cx.arc(q.x + Math.sin(t*.8 + q.p)*14, y < 0 ? y + FH : y, q.r, 0, 6.3); cx.fill(); });
+        cx.globalCompositeOperation = 'source-over';
+        const v = cx.createLinearGradient(0, FH*.6, 0, FH); v.addColorStop(0, 'rgba(8,8,20,0)'); v.addColorStop(1, 'rgba(8,8,20,.8)'); cx.fillStyle = v; cx.fillRect(0, FH*.6, FW, FH*.4);
+        cx.globalAlpha = Math.max(0, Math.min(1, lt/.5, (FD - lt)/.4)); cx.fillStyle = '#fff'; cx.font = '500 26px Fraunces, Georgia, serif'; cx.textAlign = 'center';
+        const ls = wrap(scenes[i].caption, FW - 70); ls.forEach((ln, n) => cx.fillText(ln, FW/2, FH - 60 - (ls.length - 1 - n)*34)); cx.globalAlpha = 1;
+      };
+      frame(0); st('Ready — tap Play. Narration plays aloud; the saved video has music.'); $('fp').style.display = '';
+      $('fp').onclick = () => {
+        $('fp').style.display = 'none'; $('fd').style.display = 'none';
+        const total = FD*FN, ac = new (window.AudioContext || window.webkitAudioContext)(), dest = ac.createMediaStreamDestination(), gain = ac.createGain(), now = ac.currentTime;
+        gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(.06, now + 1.2); gain.gain.setValueAtTime(.06, now + total - 1.5); gain.gain.linearRampToValueAtTime(0, now + total);
+        [220, 277.18, 329.63, 440].forEach(f => { const o = ac.createOscillator(); o.frequency.value = f; o.connect(gain); o.start(); o.stop(now + total + .2); });
+        gain.connect(dest); gain.connect(ac.destination);
+        const stream = cv.captureStream(30); dest.stream.getAudioTracks().forEach(tk => stream.addTrack(tk));
+        const mt = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '', chunks = [];
+        try{ rec = new MediaRecorder(stream, mt ? {mimeType: mt, videoBitsPerSecond: 3e6} : undefined); }catch(e){ rec = null; }
+        if(rec){
+          rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+          rec.onstop = () => { const a = $('fd'); a.href = URL.createObjectURL(new Blob(chunks, {type: mt || 'video/webm'})); a.download = 'ridea-film-' + Date.now() + (mt.includes('mp4') ? '.mp4' : '.webm'); a.style.display = ''; };
+          rec.start();
+        }
+        const t0 = performance.now(); let last = -1;
+        const tick = () => {
+          if(!alive) return;
+          const t = (performance.now() - t0)/1000;
+          if(t >= total){ frame(total - .01); if(rec && rec.state !== 'inactive') rec.stop(); $('fp').textContent = 'Play again'; $('fp').style.display = ''; st('Done — tap Download to keep your film'); return; }
+          const i = Math.floor(t/FD);
+          if(i !== last){ last = i; try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(scenes[i].caption); u.rate = .92; speechSynthesis.speak(u); }catch(e){} }
+          frame(t); requestAnimationFrame(tick);
+        };
+        st('Playing…'); tick();
+      };
+    }catch(e){ ov.remove(); throw e; }
+  }
+
   // ---- gallery: images saved in this browser (localStorage) ----
   const GAL = 'ridea-gallery-v1';
   function loadGallery(){ try{ return JSON.parse(localStorage.getItem(GAL) || '[]'); }catch(e){ return []; } }
-  function saveGallery(g){   // keeps the latest 10 images + up to 3 saved characters, on this device only
-    const ch = g.filter(x => x.char).slice(0, 3), im = g.filter(x => !x.char).slice(0, 10);
-    const keep = g.filter(x => ch.includes(x) || im.includes(x));
+  function saveGallery(g){   // latest 10 images, this device only
+    const keep = g.slice(0, 10);
     try{ localStorage.setItem(GAL, JSON.stringify(keep)); }
     catch(e){ try{ localStorage.setItem(GAL, JSON.stringify(keep.slice(0, 5))); }catch(_){} }
   }
@@ -1467,7 +1557,7 @@
   }
   loadGallery().reverse().forEach(g => projects.unshift({icon:'🖼️', name:g.name, pct:100, tone:'tone-a', img:g.img}));
   function renderPassby(arrive){
-    const box = document.getElementById('characters'), g = loadGallery();
+    const box = document.getElementById('characters'), g = loadGallery().filter(x => x.img).slice(0, 10);
     if(!g.length){
       box.innerHTML = '<div class="pb-track">' + ['Your images','Your characters','Your stories','Your worlds'].map(t => `<div class="pb-card ph"><span>${t}</span></div>`).join('') + '</div>';
       return;
@@ -1526,20 +1616,24 @@
     const finish = async (img) => {
       reset();
       const thumb = img ? await shrink(img) : null;
-      projects.unshift({icon: type==='video' ? '🎬' : type==='voice' ? '🎵' : '🖼️', name: escapeHtml(desc), pct: img ? 100 : 15, tone:"tone-a", img: thumb});
+      const short = escapeHtml(desc.length > 28 ? desc.slice(0, 28).trim() + '…' : desc);
+      projects.unshift({icon: type==='video' ? '🎬' : type==='voice' ? '🎵' : '🖼️', name: short, pct: img ? 100 : 15, tone:"tone-a", img: thumb});
       renderProjects();
-      if(thumb){ const g = loadGallery(); g.unshift({name: escapeHtml(desc), img: thumb}); saveGallery(g); renderPassby(true); }
+      if(thumb){ const g = loadGallery(); g.unshift({name: short, img: thumb}); saveGallery(g); renderPassby(true); }
       attachedFiles.push({name: `${label}: ${desc}`, size:'Reference', kind: type});
       renderFileChips();
       showToast(label + ' added to Continue creating — usable as input elsewhere');
       if(img) showImage(img, desc, thumb);
     };
     if(type === 'image' && API_URL){
-      api('/image',{prompt: desc})
+      api('/image',{prompt: styled(desc)})
         .then(j => finish('data:image/png;base64,' + j.image))
         .catch(e => { reset(); showToast(e.message); });
+    } else if(type === 'video' && API_URL){
+      if(!quickInput.value.trim()){ reset(); showToast('Describe your film idea first'); }
+      else makeFilm(desc).then(reset).catch(e => { reset(); showToast(e.message || 'Film failed — try again'); });
     } else {
-      setTimeout(() => finish(null), 1500);   // video & voice: demo only
+      setTimeout(() => finish(null), 1500);   // voice: demo only
     }
   });
   if('serviceWorker' in navigator){ window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {})); }
