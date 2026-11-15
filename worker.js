@@ -1,6 +1,7 @@
 // Ridea backend — Cloudflare Worker using Workers AI (free: 10,000 neurons/day, no card).
 // On the Workers Free plan, requests simply fail after the daily limit — you are never charged.
-const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
+const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";          // fallback
+const REF_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";           // accepts reference images -> consistent characters
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"; // change if Cloudflare retires it
 
 // ---- AI video (free GPUs: Kaggle / Colab notebooks, no credit card) ---------------
@@ -75,10 +76,28 @@ export default {
 
     try {
       if (path === "/image") {
-        const prompt = String(body.prompt || "").slice(0, 500);
+        const prompt = String(body.prompt || "").slice(0, 900);
         if (!prompt) return send({ error: "Describe the image first" }, 400);
-        const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt + ". Clean image, no text, watermark, signature or logo.", steps: 4 });
-        return send({ image: out.image });
+        const W = Math.min(1024, Math.max(256, (parseInt(body.w) || 1024) & ~15)), H = Math.min(1024, Math.max(256, (parseInt(body.h) || 1024) & ~15));
+        const ref = String(body.ref || "");
+        if (ref.length > 300000) return send({ error: "Reference too large" }, 413);
+        const tail = ". Sharp, clean image, no text, watermark, signature or logo.";
+        try {   // best quality: FLUX.2 klein, optionally conditioned on the first scene's picture
+          const form = new FormData();
+          form.append("prompt", prompt + tail);
+          form.append("width", String(W)); form.append("height", String(H));
+          if (body.seed) form.append("seed", String(parseInt(body.seed) || 1));
+          if (ref) {
+            const bin = atob(ref), u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            form.append("input_image_0", new Blob([u8], { type: "image/jpeg" }));
+          }
+          const fr = new Response(form);
+          const out = await env.AI.run(REF_MODEL, { multipart: { body: fr.body, contentType: fr.headers.get("content-type") } });
+          if (out && out.image) return send({ image: out.image, model: "klein" });
+        } catch (e) { if (/limit|quota|neuron|capacity/i.test(String(e))) throw e; }
+        const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt.slice(0, 500) + tail, steps: 4 });   // fallback: no reference
+        return send({ image: out.image, model: "schnell" });
       }
       if (path === "/concept") {
         const topic = String(body.topic || "").slice(0, 200);
@@ -120,15 +139,15 @@ export default {
         const idea = String(body.idea || "").slice(0, 200);
         if (!idea) return send({ error: "Describe your film idea first" }, 400);
         const out = await env.AI.run(TEXT_MODEL, {
-          max_tokens: 500,
+          max_tokens: 1400,
           messages: [
-            { role: "system", content: 'You write 4-scene mini stories for a 13-second film. Reply with ONLY a JSON array of exactly 4 objects: {"caption": warm narration, max 12 words, "visual": a concrete image description for an illustrator, max 30 words, no text in the image}. No other text.' },
+            { role: "system", content: 'You write 4-scene mini stories for a 13-second film. Reply with ONLY a JSON array of exactly 4 objects: {"caption": warm narration, max 12 words, "motion": 6-14 words describing ONLY a gentle natural movement for animating this picture (e.g. the lion slowly turns its head while its mane sways), "visual": a self-contained photo-director prompt, 45-60 words, no text in the image}. Invent ONE main character set (age, clothing colors, hair, distinctive features) and ONE setting, and repeat that exact same description word-for-word in every visual so the characters look identical in all 4 scenes. Each visual must also name a shot type (wide / medium / close-up), a camera angle, the lighting, and one simple natural action. No other text.' },
             { role: "user", content: `Story idea: ${idea}` },
           ],
         });
         const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
         const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
-        const scenes = arr.slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 240) }));
+        const scenes = arr.slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 420), motion: String(x.motion || "").slice(0, 120) }));
         if (scenes.length < 4) throw new Error("bad scenes");
         return send({ scenes });
       }
