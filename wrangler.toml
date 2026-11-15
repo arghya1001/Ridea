@@ -5,6 +5,11 @@ compatibility_date = "2025-01-01"
 [ai]
 binding = "AI"
 
+# Free storage (KV "ridea-kv") that remembers which free GPU notebook is online.
+[[kv_namespaces]]
+binding = "RIDEA_KV"
+id = "e5a6d15de9bc413a9aa302e504fac882"
+
 [vars]
 # Your GitHub Pages origin, no trailing slash, no path:
 ALLOWED_ORIGIN = "https://arghya1001.github.io"

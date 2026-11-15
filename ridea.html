@@ -1482,15 +1482,23 @@
       let motion = false; try{ motion = (await api('/video-status', {})).available === true; }catch(e){}
       const clips = [];
       const toClip = async (i, im) => {
-        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 170000);
+        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 600000);   // free GPUs render one clip at a time, so allow a long wait
         try{
           const c = document.createElement('canvas'); c.width = 480; c.height = 640;   // same 3:4 crop the film shows
           const k = Math.max(480/im.width, 640/im.height);
           c.getContext('2d').drawImage(im, (480 - im.width*k)/2, (640 - im.height*k)/2, im.width*k, im.height*k);
-          const r = await fetch(API_URL + '/video', {method:'POST', headers:{'Content-Type':'application/json'}, signal: ctl.signal,
-            body: JSON.stringify({image: c.toDataURL('image/jpeg', .88).split(',')[1], prompt: scenes[i].visual})});
-          if(!r.ok || !(r.headers.get('Content-Type') || '').includes('video')) return null;
-          const url = URL.createObjectURL(await r.blob()); urls.push(url);
+          const sub = await api('/video', {image: c.toDataURL('image/jpeg', .88).split(',')[1], prompt: scenes[i].visual});
+          if(!sub || !sub.id) return null;                      // no free GPU right now -> keep the painted still
+          let blob = null; const t0 = Date.now();
+          while(alive && !ctl.signal.aborted && Date.now() - t0 < 570000){       // check back every 5 s until the clip is ready
+            await new Promise(res => setTimeout(res, 5000));
+            let r2; try{ r2 = await fetch(API_URL + '/video-result', {method:'POST', headers:{'Content-Type':'application/json'}, signal: ctl.signal, body: JSON.stringify({id: sub.id, provider: sub.provider})}); }catch(e){ continue; }
+            if((r2.headers.get('Content-Type') || '').includes('video')){ blob = await r2.blob(); break; }
+            const j2 = await r2.json().catch(() => ({}));
+            if(!r2.ok || j2.status === 'error') return null;
+          }
+          if(!blob) return null;
+          const url = URL.createObjectURL(blob); urls.push(url);
           const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
           v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none'; ov.appendChild(v);
           await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; });
@@ -1508,10 +1516,10 @@
       if(!alive) return;
       if(motion){
         let done = 0, skip; const skipP = new Promise(r => skip = r), fk = $('fk');
-        const upd = () => st(`Adding AI motion… ${done} of ${FN} ready (up to 2 min)`);
+        const upd = () => st(`Adding AI motion… ${done} of ${FN} ready (free GPU, a few minutes — tap Skip to continue without)`);
         upd(); fk.style.display = ''; fk.onclick = () => skip();
         clips.forEach((p, i) => p.then(v => { vids[i] = v; done++; if(alive && fk.style.display === '') upd(); }));
-        await Promise.race([Promise.all(clips), skipP, new Promise(r => setTimeout(r, 150000))]);
+        await Promise.race([Promise.all(clips), skipP, new Promise(r => setTimeout(r, 540000))]);
         fk.style.display = 'none';
         if(!alive) return;
       }

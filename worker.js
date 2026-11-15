@@ -3,47 +3,43 @@
 const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"; // change if Cloudflare retires it
 
-// ---- AI video router -------------------------------------------------------
-// A "provider" is any HTTPS endpoint that accepts POST JSON {token, image, prompt, frames}
-// (image = base64 JPEG) and answers with an MP4 (Content-Type: video/mp4).
-// Turn one on by setting <NAME>_URL and <NAME>_TOKEN in the Worker settings.
-// Tries them in order, skips any that are out of free hours or cooling down,
-// and tells the app to use the free storybook when none can take the job.
-const VIDEO_PROVIDERS = [
-  { name: "MODAL",     hours: 30 },  // Modal: $30 free credit / month (about 37 h of an L4 GPU)
-  { name: "LIGHTNING", hours: 20 },  // Lightning AI: free monthly credits
-];
-const VIDEO_FRAMES = 81;                 // 81 frames @ 24 fps = about 3.4 s per scene
-const SAFETY = 0.9;                      // stop at 90% of a provider's free budget
-const PROVIDER_TIMEOUT_MS = 150000;      // cold start + render
-const DEFAULT_CLIPS_PER_USER_DAY = 8;    // protects the free hours from one heavy user
+// ---- AI video (free GPUs: Kaggle / Colab notebooks, no credit card) ---------------
+// A free GPU notebook (ridea_video_worker.ipynb) runs LTX-Video and registers its public
+// address here every few minutes. If it stops, the address expires on its own and the app
+// quietly falls back to the free storybook. Flow:  app -> /video (submit) -> /video-result (poll).
+// Needs: a KV namespace bound as RIDEA_KV, and a secret named RIDEA_TOKEN (any password).
+const PROVIDERS = ["KAGGLE", "COLAB"];     // names the notebook uses (it picks automatically)
+const DEFAULT_CLIPS_PER_USER_DAY = 8;      // 8 clips = 2 films per person per day
 
-const coolMem = new Map();               // fallback cooldown when no KV is bound
-const monthKey = () => new Date().toISOString().slice(0, 7);
+const coolMem = new Map();                 // fallback cooldown when KV is slow
 const dayKey = () => new Date().toISOString().slice(0, 10);
-const activeProviders = env => VIDEO_PROVIDERS
-  .filter(p => env[p.name + "_URL"])
-  .map(p => ({
-    name: p.name, url: env[p.name + "_URL"], token: env[p.name + "_TOKEN"] || "",
-    budgetSec: (parseFloat(env[p.name + "_BUDGET_HOURS"]) || p.hours) * 3600 * SAFETY,
-  }));
-async function kvNum(env, key) {
-  if (!env.RIDEA_KV) return 0;
-  try { return parseFloat(await env.RIDEA_KV.get(key)) || 0; } catch { return 0; }
+async function kvGet(env, key) {
+  if (!env.RIDEA_KV) return null;
+  try { return await env.RIDEA_KV.get(key); } catch { return null; }
 }
+async function kvNum(env, key) { return parseFloat(await kvGet(env, key)) || 0; }
 async function kvPut(env, key, val, opts) {
   if (!env.RIDEA_KV) return;
   try { await env.RIDEA_KV.put(key, String(val), opts); } catch {}
 }
 async function isCooling(env, name) {
   if ((coolMem.get(name) || 0) > Date.now()) return true;
-  if (!env.RIDEA_KV) return false;
-  try { return !!(await env.RIDEA_KV.get("cool:" + name)); } catch { return false; }
+  return !!(await kvGet(env, "cool:" + name));
 }
 async function cool(env, name, status) {
-  const ttl = [402, 403, 429].includes(status) ? 3 * 3600 : 600;   // out of credit -> rest longer
+  const ttl = [402, 403, 429].includes(status) ? 3 * 3600 : 600;
   coolMem.set(name, Date.now() + ttl * 1000);
-  await kvPut(env, "cool:" + name, "1", { expirationTtl: ttl });
+  await kvPut(env, "cool:" + name, "1", { expirationTtl: Math.max(60, ttl) });
+}
+// notebooks that registered recently (their address expires if they stop)
+async function liveProviders(env) {
+  const out = [];
+  for (const name of PROVIDERS) {
+    if (await isCooling(env, name)) continue;
+    const url = await kvGet(env, "url:" + name);
+    if (url) out.push({ name, url });
+  }
+  return out;
 }
 
 export default {
@@ -60,6 +56,17 @@ export default {
 
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
     if (req.method !== "POST") return send({ error: "POST only" }, 405);
+    if (new URL(req.url).pathname === "/worker/register") {
+      let b; try { b = await req.json(); } catch { return send({ error: "Bad JSON" }, 400); }
+      if (!env.RIDEA_TOKEN || b.token !== env.RIDEA_TOKEN) return send({ error: "bad token" }, 401);
+      if (!env.RIDEA_KV) return send({ error: "KV namespace RIDEA_KV is not connected to this Worker" }, 500);
+      const name = String(b.name || ""), u = String(b.url || "");
+      if (!PROVIDERS.includes(name) || !/^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/.test(u)) return send({ error: "bad name or url" }, 400);
+      await env.RIDEA_KV.put("url:" + name, u, { expirationTtl: 1500 });
+      coolMem.delete(name);
+      try { await env.RIDEA_KV.delete("cool:" + name); } catch {}
+      return send({ ok: true });
+    }
     if (!allowed.includes(origin)) return send({ error: "Origin not allowed" }, 403);
 
     const path = new URL(req.url).pathname;
@@ -128,17 +135,11 @@ export default {
       if (path === "/video-status") {
         const cap = parseInt(env.CLIPS_PER_USER_DAY) || DEFAULT_CLIPS_PER_USER_DAY;
         const ip = req.headers.get("CF-Connecting-IP") || "anon";
-        let left = 0, total = 0, avail = false;
-        for (const p of activeProviders(env)) {
-          total += p.budgetSec;
-          if (await isCooling(env, p.name)) continue;
-          const used = await kvNum(env, `used:${p.name}:${monthKey()}`);
-          if (used < p.budgetSec) { avail = true; left += p.budgetSec - used; }
-        }
+        const live = await liveProviders(env);
         const clipsLeft = Math.max(0, cap - await kvNum(env, `u:${ip}:${dayKey()}`));
-        return send({ available: avail && clipsLeft > 0, percentLeft: total ? Math.round(100 * left / total) : 0, clipsLeftToday: clipsLeft });
+        return send({ available: live.length > 0 && clipsLeft > 0, gpus: live.length, clipsLeftToday: clipsLeft });
       }
-      if (path === "/video") {
+      if (path === "/video") {          // submit one clip; returns {id, provider} right away
         const prompt = String(body.prompt || "").slice(0, 300);
         const image = String(body.image || "");
         if (!prompt || !image) return send({ error: "Missing image or prompt" }, 400);
@@ -147,32 +148,35 @@ export default {
         const ukey = `u:${req.headers.get("CF-Connecting-IP") || "anon"}:${dayKey()}`;
         const userUsed = await kvNum(env, ukey);
         if (userUsed >= cap) return send({ fallback: true, reason: "daily-user-limit" });
-        for (const p of activeProviders(env)) {
-          if (await isCooling(env, p.name)) continue;
-          const pkey = `used:${p.name}:${monthKey()}`;
-          const used = await kvNum(env, pkey);
-          if (used >= p.budgetSec) continue;
-          const t0 = Date.now();
+        for (const p of await liveProviders(env)) {
           try {
-            const up = await fetch(p.url, {
+            const up = await fetch(p.url + "/submit", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token: p.token, image, prompt, frames: VIDEO_FRAMES }),
-              signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+              headers: { "Content-Type": "application/json", "X-Token": env.RIDEA_TOKEN || "" },
+              body: JSON.stringify({ image, prompt }),
+              signal: AbortSignal.timeout(25000),
             });
-            if (!up.ok || !(up.headers.get("Content-Type") || "").includes("video")) {
-              try { await up.body?.cancel(); } catch {}
-              await cool(env, p.name, up.status);
-              continue;
-            }
-            await kvPut(env, pkey, used + Math.max(1, (Date.now() - t0) / 1000));
+            if (!up.ok) { try { await up.body?.cancel(); } catch {} await cool(env, p.name, up.status); continue; }
+            const j = await up.json();
             await kvPut(env, ukey, userUsed + 1, { expirationTtl: 172800 });
-            return new Response(up.body, { status: 200, headers: { ...cors, "Content-Type": "video/mp4", "Cache-Control": "no-store", "X-Video-Provider": p.name.toLowerCase() } });
-          } catch {
-            await cool(env, p.name, 0);
-          }
+            return send({ id: j.id, provider: p.name });
+          } catch { await cool(env, p.name, 0); }
         }
         return send({ fallback: true, reason: "no-provider" });
+      }
+      if (path === "/video-result") {   // poll: returns the MP4 when ready, else {status}
+        const provider = String(body.provider || ""), id = String(body.id || "");
+        if (!PROVIDERS.includes(provider) || !/^[a-f0-9]{6,32}$/.test(id)) return send({ error: "bad request" }, 400);
+        const url = await kvGet(env, "url:" + provider);
+        if (!url) return send({ status: "error" });
+        try {
+          const up = await fetch(url + "/result/" + id, { headers: { "X-Token": env.RIDEA_TOKEN || "" }, signal: AbortSignal.timeout(60000) });
+          if ((up.headers.get("Content-Type") || "").includes("video"))
+            return new Response(up.body, { status: 200, headers: { ...cors, "Content-Type": "video/mp4", "Cache-Control": "no-store", "X-Video-Provider": provider.toLowerCase() } });
+          if (up.status === 404) return send({ status: "error" });
+          const j = await up.json().catch(() => ({}));
+          return send({ status: j.status || "retry" });
+        } catch { return send({ status: "retry" }); }
       }
       return send({ error: "Not found" }, 404);
     } catch (e) {
