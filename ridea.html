@@ -1613,12 +1613,21 @@
       }
       // Stage 3: script -> scenes (the pictures come next)
       st('Planning the scenes from your script…');
-      try{ const r0 = await api('/scenes', {idea, story, script: script.slice(0, 2800)}); scenes = r0.scenes; sheet = r0.sheet || ''; subjects = r0.subjects || []; story = r0.story || story; }catch(e){}
-      if(!scenes || scenes.length < FN) scenes = [
-        {caption:'Once, in a quiet corner of the world…', visual: idea + ', wide establishing shot at dawn'},
-        {caption:'Something small began to stir.', visual: idea + ', a quiet close-up moment'},
-        {caption:'And then, a little magic appeared.', visual: idea + ', a magical surprise, glowing light'},
-        {caption:'And everything felt right.', visual: idea + ', warm golden ending, hopeful'}];
+      let planErr = '';
+      for(let tr = 0; tr < 2 && (!scenes || scenes.length < FN); tr++){   // the planner is what keeps characters identical, so try twice before giving up
+        try{ const r0 = await api('/scenes', {idea, story, script: script.slice(0, 2800)}); scenes = r0.scenes; sheet = r0.sheet || ''; subjects = r0.subjects || []; story = r0.story || story; }catch(e){ planErr = (e && e.message) || 'planner busy'; if(tr === 0) await new Promise(r => setTimeout(r, 2500)); }
+      }
+      if(!scenes || scenes.length < FN){
+        // planner unavailable: build the 4 scenes from the story's own sentences and repeat the story in every picture, so the characters stay the same
+        showToast('Scene planner unavailable (' + planErr.slice(0, 80) + '). Using your story directly.');
+        const txt = (story || script || idea).replace(/\s+/g, ' ').trim();
+        let sn = (txt.match(/[^.!?]+[.!?]*/g) || []).map(x => x.trim()).filter(x => x.length > 12);
+        while(sn.length < FN) sn.push(sn[sn.length - 1] || idea);
+        const per = sn.length / FN, anchor = txt.slice(0, 260), shots = ['wide full-body establishing shot, every character fully visible, even light', 'medium shot from a different angle', 'close two-shot, soft light', 'warm golden-hour wide shot'];
+        scenes = shots.map((sh, k) => { const beat = sn.slice(Math.floor(k*per), Math.max(Math.floor(k*per) + 1, Math.floor((k + 1)*per))).join(' ');
+          return {caption: sn[Math.floor(k*per)].slice(0, 90), visual: (beat.slice(0, 200) + '. ' + sh + '. The same characters, same clothes and same place in every scene: ' + anchor).slice(0, 520)}; });
+        sheet = 'The scene planner was busy, so each scene follows one part of your story. Describe your characters clearly in the story (age, hair, clothes) to keep them the same.';
+      }
       scenes = scenes.slice(0, FN);
       // ---- plan review: idea -> mini story -> scenes, all editable before any picture is painted ----
       await new Promise(resolve => {
@@ -1760,7 +1769,7 @@
         bc.onclick = async () => { bc.disabled = true; gpu.textContent = 'Checking…'; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; gpuWhy = vs.detail || ''; }catch(e){ motion = false; gpuWhy = 'Could not reach the Worker.'; } bc.disabled = false; showGpu(); };
         if(motion) row.appendChild(bm); else row.appendChild(bc); row.appendChild(bs); rv.append(grid, gpu, row); showGpu();
         cv.style.display = 'none'; cv.after(rv);
-        st(bad.size ? 'Red-outlined scenes still failed the consistency check. Tap them to repaint.' : 'All scenes passed the consistency check. Tap one to repaint it, or choose below.');
+        st(!subjects.length ? 'Consistency check was skipped (no character list this time). Look at the scenes yourself and tap any to repaint.' : bad.size ? 'Red-outlined scenes still failed the consistency check. Tap them to repaint.' : 'All scenes passed the consistency check. Tap one to repaint it, or choose below.');
         const done = c => { rv.remove(); cv.style.display = ''; wake = null; resolve(c); };
         bm.onclick = () => done('motion'); bs.onclick = () => done('still');
       });
