@@ -1443,28 +1443,23 @@
   }
 
   // ---- Dreamy anime style + 13-second Motion Storybook ----
-  const STYLES = {
-    cinematic: {label: 'Cinematic', add: ', ultra-detailed cinematic photograph, 85mm lens, shallow depth of field, golden-hour volumetric light, natural textures, rich color grading, sharp focus, 8k'},
-    pixar:     {label: '3D animated', add: ', premium 3D animated film still, Pixar-style character design, large expressive eyes, soft warm volumetric lighting, richly detailed environment, depth of field, sharp focus'},
-    anime:     {label: 'Dreamy anime', add: ', hand-painted anime fantasy illustration, soft watercolor sky, lush detail, warm gentle light'},
-    off:       {label: 'Off', add: ''}};
-  const ORDER = ['cinematic', 'pixar', 'anime', 'off'];
-  let styleKey = 'cinematic'; try{ const sv = localStorage.getItem('ridea-style'); if(STYLES[sv]) styleKey = sv; }catch(e){}
-  const styled = p => p + STYLES[styleKey].add;
+  const STYLE = ', hand-painted anime fantasy illustration, soft watercolor sky, lush detail, warm gentle light';
+  let dreamy = true; try{ dreamy = localStorage.getItem('ridea-dreamy') !== '0'; }catch(e){}
+  const styled = p => dreamy ? p + STYLE : p;
   (function(){
     const row = document.querySelector('.quick-row'); if(!row) return;
     const b = document.createElement('button'); b.type = 'button';
     b.style.cssText = 'margin:0 0 10px;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--paper);font:500 13px Inter,sans-serif;cursor:pointer';
-    const paint = () => { b.textContent = 'Style: ' + STYLES[styleKey].label + ' (tap to change)'; b.style.borderColor = styleKey !== 'off' ? '#a99bff' : 'rgba(255,255,255,.16)'; };
-    b.onclick = () => { styleKey = ORDER[(ORDER.indexOf(styleKey) + 1) % ORDER.length]; try{ localStorage.setItem('ridea-style', styleKey); }catch(e){} paint(); };
+    const paint = () => { b.textContent = 'Dreamy anime style: ' + (dreamy ? 'on' : 'off'); b.style.borderColor = dreamy ? '#a99bff' : 'rgba(255,255,255,.16)'; };
+    b.onclick = () => { dreamy = !dreamy; try{ localStorage.setItem('ridea-dreamy', dreamy ? '1' : '0'); }catch(e){} paint(); };
     paint(); row.parentNode.insertBefore(b, row);
   })();
 
-  const FD = 3.2, FN = 4, FW = 540, FH = 720, SC = 1.5;   // SC = render scale: sharper canvas, same layout
+  const FD = 3.2, FN = 4, FW = 540, FH = 720;
   async function makeFilm(idea){
     const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgb(8,8,20);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
-    ov.innerHTML = `<canvas width="${FW*SC}" height="${FH*SC}" style="width:min(100%,360px);aspect-ratio:3/4;border-radius:16px;background:#14142b"></canvas>
+    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(8,8,20,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
+    ov.innerHTML = `<canvas width="${FW}" height="${FH}" style="width:min(100%,360px);aspect-ratio:3/4;border-radius:16px;background:#14142b"></canvas>
       <div id="fs" style="color:#cfc6ff;font:500 14px Inter,sans-serif;text-align:center;min-height:20px">Writing your story…</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button id="fp" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Play film</button>
       <button id="fk" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Skip motion</button>
@@ -1472,49 +1467,30 @@
       <button id="fc" class="generate-btn" style="padding:12px 20px;border-radius:12px">Close</button></div>`;
     document.body.appendChild(ov);
     const $ = id => ov.querySelector('#' + id), cv = ov.querySelector('canvas'), cx = cv.getContext('2d'), st = t => { $('fs').textContent = t; };
-    let alive = true, rec = null, wake = null; const urls = [], vids = [], fx = styleKey === 'anime';   // wobble/glow/mist only suit the painted anime look
-    $('fc').onclick = () => { alive = false; if(wake) wake('x'); urls.forEach(u => URL.revokeObjectURL(u)); try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
+    let alive = true, rec = null; const urls = [], vids = [];
+    $('fc').onclick = () => { alive = false; urls.forEach(u => URL.revokeObjectURL(u)); try{ speechSynthesis.cancel(); if(rec && rec.state !== 'inactive') rec.stop(); }catch(e){} ov.remove(); };
     try{
       let scenes = null;
-      let sheet = '', subjects = []; try{ const r0 = await api('/scenes', {idea}); scenes = r0.scenes; sheet = r0.sheet || ''; subjects = r0.subjects || []; }catch(e){}
+      try{ scenes = (await api('/scenes', {idea})).scenes; }catch(e){}
       if(!scenes || scenes.length < FN) scenes = [
         {caption:'Once, in a quiet corner of the world…', visual: idea + ', wide establishing shot at dawn'},
         {caption:'Something small began to stir.', visual: idea + ', a quiet close-up moment'},
         {caption:'And then, a little magic appeared.', visual: idea + ', a magical surprise, glowing light'},
         {caption:'And everything felt right.', visual: idea + ', warm golden ending, hopeful'}];
       scenes = scenes.slice(0, FN);
-      // ---- plan review: the AI director's plan, editable, before any picture is painted ----
-      await new Promise(resolve => {
-        wake = resolve;
-        const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:min(100%,420px);max-height:70vh;overflow:auto';
-        const tax = 'width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;font:400 13px Inter,sans-serif;padding:8px;resize:vertical';
-        if(sheet){ const n = document.createElement('div'); n.textContent = 'Characters & setting: ' + sheet; n.style.cssText = 'color:#cfc6ff;font:400 12px Inter,sans-serif;line-height:1.4'; rv.appendChild(n); }
-        const caps = [], viss = [];
-        scenes.forEach((sc, i) => {
-          const h = document.createElement('div'); h.textContent = 'Scene ' + (i + 1); h.style.cssText = 'color:#fff;font:600 13px Inter,sans-serif;margin-top:4px';
-          const c1 = document.createElement('textarea'); c1.rows = 1; c1.value = sc.caption; c1.style.cssText = tax;
-          const v1 = document.createElement('textarea'); v1.rows = 4; v1.value = sc.visual; v1.style.cssText = tax;
-          caps.push(c1); viss.push(v1); rv.append(h, c1, v1);
-        });
-        const go = document.createElement('button'); go.className = 'generate-btn'; go.textContent = 'Paint these scenes'; go.style.cssText = 'padding:12px 20px;border-radius:12px;align-self:center;margin-top:6px';
-        rv.appendChild(go); cv.style.display = 'none'; cv.after(rv);
-        st('Your idea, planned by the AI director. Edit anything you like, then paint.');
-        go.onclick = () => { scenes.forEach((sc, i) => { sc.caption = caps[i].value.trim() || sc.caption; sc.visual = viss[i].value.trim() || sc.visual; }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
-      });
-      if(!alive) return;
       // AI motion (optional): the Worker routes to free GPU providers; any failure just keeps the free storybook look
-      let motion = false, clipsLeft = null, gpus = 0; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; }catch(e){}
+      let motion = false; try{ motion = (await api('/video-status', {})).available === true; }catch(e){}
       const clips = [];
       const toClip = async (i, im) => {
-        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 1500000);   // free GPUs render one clip at a time, so allow a long wait
+        const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 600000);   // free GPUs render one clip at a time, so allow a long wait
         try{
-          const c = document.createElement('canvas'); c.width = 576; c.height = 768;   // same 3:4 crop the film shows
-          const k = Math.max(576/im.width, 768/im.height);
-          c.getContext('2d').drawImage(im, (576 - im.width*k)/2, (768 - im.height*k)/2, im.width*k, im.height*k);
-          const sub = await api('/video', {image: c.toDataURL('image/jpeg', .88).split(',')[1], prompt: ((scenes[i].motion ? scenes[i].motion + '. ' : '') + scenes[i].visual).slice(0, 300)});
+          const c = document.createElement('canvas'); c.width = 480; c.height = 640;   // same 3:4 crop the film shows
+          const k = Math.max(480/im.width, 640/im.height);
+          c.getContext('2d').drawImage(im, (480 - im.width*k)/2, (640 - im.height*k)/2, im.width*k, im.height*k);
+          const sub = await api('/video', {image: c.toDataURL('image/jpeg', .88).split(',')[1], prompt: scenes[i].visual, motion: scenes[i].motion || ''});
           if(!sub || !sub.id) return null;                      // no free GPU right now -> keep the painted still
           let blob = null; const t0 = Date.now();
-          while(alive && !ctl.signal.aborted && Date.now() - t0 < 1450000){       // check back every 5 s until the clip is ready
+          while(alive && !ctl.signal.aborted && Date.now() - t0 < 570000){       // check back every 5 s until the clip is ready
             await new Promise(res => setTimeout(res, 5000));
             let r2; try{ r2 = await fetch(API_URL + '/video-result', {method:'POST', headers:{'Content-Type':'application/json'}, signal: ctl.signal, body: JSON.stringify({id: sub.id, provider: sub.provider})}); }catch(e){ continue; }
             if((r2.headers.get('Content-Type') || '').includes('video')){ blob = await r2.blob(); break; }
@@ -1523,112 +1499,29 @@
           }
           if(!blob) return null;
           const url = URL.createObjectURL(blob); urls.push(url);
-          const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.preload = 'auto'; v.src = url;
+          const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.loop = true; v.preload = 'auto'; v.src = url;
           v.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none'; ov.appendChild(v);
           await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; });
           return v;
         }catch(e){ return null; }finally{ clearTimeout(to); }
       };
-      const imgs = []; let firstB64 = null, refB64 = null; const seed = 1 + Math.floor(Math.random()*999999);
-      const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible. New scene: ';
-      const WIDE1 = 'Wide full-body shot, every subject completely visible head to toe, clearly separate and easy to tell apart, even natural light. ';
-      const paintScene = async (i, sd) => {
-        const j = await api('/image', {prompt: (i > 0 && refB64 ? REFP : i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
-        if(i === 0) firstB64 = j.image;
-        imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
-        if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
-      };
-      // consistency gate: a vision model checks every subject is really in each picture; failures are repainted automatically
-      const bad = new Set();
-      const checkImg = async i => {
-        if(!subjects.length) return {ok: true};
-        try{ const c = document.createElement('canvas'); c.width = 384; c.height = 512; c.getContext('2d').drawImage(imgs[i], 0, 0, 384, 512);
-          return await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects}); }catch(e){ return {ok: true}; }
-      };
-      const paintChecked = async (i, sd) => {
-        let r = {ok: true, missing: []};
-        for(let t = 0; t < 3 && alive; t++){
-          await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd);
-          st(`Checking scene ${i + 1} for consistency…`);
-          r = await checkImg(i);
-          if(r.ok){ bad.delete(i); return; }
-          if(t < 2) st(`Scene ${i + 1} failed the check (missing: ${(r.missing || []).join('; ')}). Repainting, try ${t + 2} of 3…`);
-        }
-        bad.add(i);
-      };
+      const imgs = []; let firstB64 = null;
       for(let i = 0; i < FN && alive; i++){
-        st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
-        await paintChecked(i, seed);
+        st(`Painting scene ${i + 1} of ${FN}… ` + (motion ? '(AI motion on)' : '(about 15 seconds each)'));
+        const j = await api('/image', {prompt: styled(scenes[i].visual)});
+        if(i === 0) firstB64 = j.image;
+        imgs.push(await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; }));
+        if(motion) clips[i] = toClip(i, imgs[i]);   // starts rendering now, while the next scene is painted
       }
-      if(!alive) return;
-      // ---- review step: look at the paintings first, repaint any you dislike, then choose motion or not ----
-      const choice = await new Promise(resolve => {
-        wake = resolve;
-        const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;width:min(100%,360px)';
-        const grid = document.createElement('div'); grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%';
-        const ths = imgs.map((im, i) => { const t = document.createElement('img'); t.src = im.src; t.style.cssText = 'width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;cursor:pointer;transition:opacity .2s'; t.title = 'Tap to repaint scene ' + (i + 1); grid.appendChild(t); return t; });
-        const mk = (txt) => { const b = document.createElement('button'); b.className = 'generate-btn'; b.textContent = txt; b.style.cssText = 'padding:12px 20px;border-radius:12px'; return b; };
-        const bm = mk('Add AI motion (about 5 min)'), bs = mk(motion ? 'Make film without motion' : 'Make film');
-        let busy = false;
-        const redo = async i => {
-          if(busy) return; busy = true; bm.disabled = bs.disabled = true;
-          const list = i === 0 ? [0, 1, 2, 3] : [i];   // repainting scene 1 changes the character, so the rest follow it
-          try{
-            for(const k of list){ ths[k].style.opacity = .35; st(`Repainting scene ${k + 1}…`); await paintChecked(k, 1 + Math.floor(Math.random()*999999)); ths[k].src = imgs[k].src; ths[k].style.outline = bad.has(k) ? '3px solid #ff6b6b' : 'none'; ths[k].style.opacity = 1; }
-          }catch(e){ list.forEach(k => ths[k].style.opacity = 1); }
-          st('Tap a scene to repaint it. Happy with them? Choose below.'); busy = false; bm.disabled = bs.disabled = false;
-        };
-        ths.forEach((t, i) => { t.onclick = () => redo(i); if(bad.has(i)) t.style.outline = '3px solid #ff6b6b'; });
-        const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center';
-        const gpu = document.createElement('div'); gpu.style.cssText = 'color:#cfc6ff;font:400 12px Inter,sans-serif;text-align:center;line-height:1.4';
-        const bc = mk('Check AI motion GPU');
-        const showGpu = () => {
-          gpu.textContent = motion ? 'AI motion GPU is online ✓' : (gpus > 0 && clipsLeft === 0 ? 'Daily AI-motion limit reached for today. Try again tomorrow.' : 'AI motion GPU is offline. Start the Kaggle notebook, wait for READY, then tap Check.');
-          bs.textContent = motion ? 'Make film without motion' : 'Make film';
-          if(motion){ if(!bm.isConnected) row.insertBefore(bm, row.firstChild); bc.remove(); }
-        };
-        bc.onclick = async () => { bc.disabled = true; gpu.textContent = 'Checking…'; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; }catch(e){ motion = false; } bc.disabled = false; showGpu(); };
-        if(motion) row.appendChild(bm); else row.appendChild(bc); row.appendChild(bs); rv.append(grid, gpu, row); showGpu();
-        cv.style.display = 'none'; cv.after(rv);
-        st(bad.size ? 'Red-outlined scenes still failed the consistency check. Tap them to repaint.' : 'All scenes passed the consistency check. Tap one to repaint it, or choose below.');
-        const done = c => { rv.remove(); cv.style.display = ''; wake = null; resolve(c); };
-        bm.onclick = () => done('motion'); bs.onclick = () => done('still');
-      });
-      if(!alive) return;
-      if(choice === 'motion') imgs.forEach((im, i) => { clips[i] = toClip(i, im); });
-      else motion = false;
       if(!alive) return;
       if(motion){
         let done = 0, skip; const skipP = new Promise(r => skip = r), fk = $('fk');
         const upd = () => st(`Adding AI motion… ${done} of ${FN} ready (free GPU, a few minutes — tap Skip to continue without)`);
         upd(); fk.style.display = ''; fk.onclick = () => skip();
         clips.forEach((p, i) => p.then(v => { vids[i] = v; done++; if(alive && fk.style.display === '') upd(); }));
-        await Promise.race([Promise.all(clips), skipP, new Promise(r => setTimeout(r, 1500000))]);
+        await Promise.race([Promise.all(clips), skipP, new Promise(r => setTimeout(r, 540000))]);
         fk.style.display = 'none';
         if(!alive) return;
-        if(vids.some(Boolean)){   // review the AI clips: keep the good ones, switch a bad one back to the still, or re-render it
-          await new Promise(resolve => {
-            wake = resolve; const use = [0, 1, 2, 3].map(i => !!vids[i]);
-            const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:10px;width:min(100%,360px)';
-            const grid = document.createElement('div'); grid.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%';
-            const mkb = (t, f) => { const bt = document.createElement('button'); bt.textContent = t; bt.style.cssText = 'padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:500 12px Inter,sans-serif;cursor:pointer'; bt.onclick = f; return bt; };
-            [0, 1, 2, 3].forEach(i => {
-              const box = document.createElement('div'); box.style.cssText = 'display:flex;flex-direction:column;gap:6px;align-items:center';
-              const pv = document.createElement('video'); pv.muted = true; pv.loop = true; pv.playsInline = true; pv.autoplay = true; pv.style.cssText = 'width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;cursor:pointer;transition:opacity .2s';
-              if(vids[i]){ pv.src = vids[i].src; pv.play().catch(() => {}); } else pv.poster = imgs[i].src;
-              const lab = document.createElement('div'); lab.style.cssText = 'color:#cfc6ff;font:500 12px Inter,sans-serif';
-              const paint = () => { pv.style.opacity = use[i] ? 1 : .35; lab.textContent = 'Scene ' + (i + 1) + ': ' + (!vids[i] ? 'no clip (still)' : use[i] ? 'AI motion ✓' : 'still'); };
-              pv.onclick = () => { if(vids[i]){ use[i] = !use[i]; paint(); } };
-              const rd = mkb('Redo motion', async () => { rd.disabled = true; lab.textContent = 'Scene ' + (i + 1) + ': re-rendering (~1-2 min)…'; const v = await toClip(i, imgs[i]); if(v){ vids[i] = v; pv.src = v.src; pv.play().catch(() => {}); use[i] = true; } paint(); rd.disabled = false; });
-              paint(); box.append(pv, lab, rd); grid.appendChild(box);
-            });
-            const go = document.createElement('button'); go.className = 'generate-btn'; go.textContent = 'Make film'; go.style.cssText = 'padding:12px 20px;border-radius:12px';
-            rv.append(grid, go); cv.style.display = 'none'; cv.after(rv);
-            st('Tap a clip to switch it to the still picture if it looks wrong, or redo it. Then tap Make film.');
-            go.onclick = () => { use.forEach((u, i) => { if(!u) vids[i] = null; }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
-          });
-          if(!alive) return;
-        }
       }
       try{
         const cover = await shrink('data:image/png;base64,' + firstB64), nm = escapeHtml(('Film: ' + idea).length > 28 ? ('Film: ' + idea).slice(0, 28).trim() + '…' : 'Film: ' + idea);
@@ -1639,36 +1532,36 @@
       const parts = Array.from({length: 36}, () => ({x: Math.random()*FW, y: Math.random()*FH, r: 1 + Math.random()*2.5, v: 8 + Math.random()*18, p: Math.random()*6}));
       const wrap = (s2, mw) => { const out = []; let l = ''; s2.split(' ').forEach(w => { const t2 = l ? l + ' ' + w : w; if(cx.measureText(t2).width > mw && l){ out.push(l); l = w; } else l = t2; }); out.push(l); return out; };
       const src = i => (vids[i] && vids[i].readyState >= 2) ? vids[i] : imgs[i];   // AI clip if ready, else painted still
-      const scene = (img, p, i, a, t, flat) => {
+      const scene = (img, p, i, a, t, strips = true) => {
         const isV = !!img.videoWidth, iw = img.videoWidth || img.width, ih = img.videoHeight || img.height;
         const z = isV ? 1.04 : (i % 2 ? 1.22 - .14*p : 1.08 + .14*p), dx = isV ? 0 : (i % 3 - 1) * 26 * (p - .5), dy = isV ? 0 : -14*p;
         const k = Math.max(FW/iw, FH/ih) * z, w = iw*k, h = ih*k, x0 = (FW - w)/2 + dx, y0 = (FH - h)/2 + dy;
-        const N = (isV || flat || !fx) ? 1 : 48, sh = ih/N, dh = h/N;
+        const N = (isV || !strips) ? 1 : 48, sh = ih/N, dh = h/N;
         cx.globalAlpha = a;
         for(let n = 0; n < N; n++){            // draw in thin strips so the picture ripples like wind
           const y01 = n/N, sky = Math.max(0, .45 - y01)/.45;
-          const off = (isV || flat || !fx) ? 0 : Math.sin(t*.9 + n*.35 + i)*(4 + 10*y01) + sky*Math.sin(t*.35 + i)*28;   // trees/grass sway, sky drifts
+          const off = (isV || !strips) ? 0 : Math.sin(t*.9 + n*.35 + i)*(4 + 10*y01) + sky*Math.sin(t*.35 + i)*28;   // trees/grass sway, sky drifts
           cx.drawImage(img, 0, n*sh, iw, sh + 1, x0 + off, y0 + n*dh, w, dh + 1);
         }
         cx.globalAlpha = 1;
       };
       const frame = t => {
         const i = Math.min(FN - 1, Math.floor(t/FD)), lt = Math.min(FD, t - i*FD), p = lt/FD;
-        cx.setTransform(SC, 0, 0, SC, 0, 0); cx.imageSmoothingQuality = 'high'; cx.clearRect(0, 0, FW, FH);
+        cx.clearRect(0, 0, FW, FH);
         const fade = i > 0 ? Math.min(1, lt/.6) : 1;
         if(i > 0 && lt < .6) scene(src(i-1), 1, i-1, 1, t);
         scene(src(i), p, i, fade, t);
-        if(fx){ cx.globalCompositeOperation = 'screen'; scene(glows[i], p, i, (.14 + .08*Math.sin(t*2.2))*fade, t, true); cx.globalCompositeOperation = 'source-over'; }   // lantern/light glow pulse
-        for(let n = 0; fx && n < 3; n++){      // drifting mist over the sky
+        cx.globalCompositeOperation = 'screen'; scene(glows[i], p, i, (.14 + .08*Math.sin(t*2.2))*fade, t, false);   // glow drawn in one piece: no scan-lines cx.globalCompositeOperation = 'source-over';   // lantern/light glow pulse
+        for(let n = 0; n < 3; n++){            // drifting mist over the sky
           const x = ((t*(10 + n*6) + n*220) % (FW + 400)) - 200, y = 70 + n*95;
           cx.save(); cx.translate(x, y); cx.scale(1, .4);
           const gr = cx.createRadialGradient(0, 0, 10, 0, 0, 190); gr.addColorStop(0, 'rgba(255,255,255,.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
           cx.fillStyle = gr; cx.fillRect(-190, -190, 380, 380); cx.restore();
         }
-        if(fx){ const g = cx.createLinearGradient(0, 0, FW, FH*.7); g.addColorStop(0, `rgba(255,230,170,${.10 + .05*Math.sin(t*1.3)})`); g.addColorStop(.5, 'rgba(255,230,170,0)');
-        cx.fillStyle = g; cx.fillRect(0, 0, FW, FH); }
+        const g = cx.createLinearGradient(0, 0, FW, FH*.7); g.addColorStop(0, `rgba(255,230,170,${.10 + .05*Math.sin(t*1.3)})`); g.addColorStop(.5, 'rgba(255,230,170,0)');
+        cx.fillStyle = g; cx.fillRect(0, 0, FW, FH);
         cx.globalCompositeOperation = 'lighter';
-        if(fx) parts.forEach(q => { const y = (q.y - q.v*t) % FH; cx.fillStyle = `rgba(255,226,160,${.25 + .2*Math.sin(t*2 + q.p)})`; cx.beginPath(); cx.arc(q.x + Math.sin(t*.8 + q.p)*14, y < 0 ? y + FH : y, q.r, 0, 6.3); cx.fill(); });
+        parts.forEach(q => { const y = (q.y - q.v*t) % FH; cx.fillStyle = `rgba(255,226,160,${.25 + .2*Math.sin(t*2 + q.p)})`; cx.beginPath(); cx.arc(q.x + Math.sin(t*.8 + q.p)*14, y < 0 ? y + FH : y, q.r, 0, 6.3); cx.fill(); });
         cx.globalCompositeOperation = 'source-over';
         const v = cx.createLinearGradient(0, FH*.6, 0, FH); v.addColorStop(0, 'rgba(8,8,20,0)'); v.addColorStop(1, 'rgba(8,8,20,.8)'); cx.fillStyle = v; cx.fillRect(0, FH*.6, FW, FH*.4);
         cx.globalAlpha = Math.max(0, Math.min(1, lt/.5, (FD - lt)/.4)); cx.fillStyle = '#fff'; cx.font = '500 26px Fraunces, Georgia, serif'; cx.textAlign = 'center';
@@ -1683,7 +1576,7 @@
         gain.connect(dest); gain.connect(ac.destination);
         const stream = cv.captureStream(30); dest.stream.getAudioTracks().forEach(tk => stream.addTrack(tk));
         const mt = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || '', chunks = [];
-        try{ rec = new MediaRecorder(stream, mt ? {mimeType: mt, videoBitsPerSecond: 10e6} : undefined); }catch(e){ rec = null; }
+        try{ rec = new MediaRecorder(stream, mt ? {mimeType: mt, videoBitsPerSecond: 3e6} : undefined); }catch(e){ rec = null; }
         if(rec){
           rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
           rec.onstop = () => {
@@ -1701,7 +1594,7 @@
           const t = (performance.now() - t0)/1000;
           if(t >= total){ frame(total - .01); if(rec && rec.state !== 'inactive') rec.stop(); $('fp').textContent = 'Play again'; $('fp').style.display = ''; st('Done — tap Download to keep your film'); return; }
           const i = Math.floor(t/FD);
-          if(i !== last){ last = i; if(vids[i]){ try{ vids[i].currentTime = 0; vids[i].playbackRate = .8; vids[i].play().catch(() => {}); }catch(e){} } try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(scenes[i].caption); u.rate = .92; speechSynthesis.speak(u); }catch(e){} }
+          if(i !== last){ last = i; if(vids[i]){ try{ vids[i].currentTime = 0; vids[i].play().catch(() => {}); }catch(e){} } try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(scenes[i].caption); u.rate = .92; speechSynthesis.speak(u); }catch(e){} }
           frame(t); requestAnimationFrame(tick);
         };
         st('Playing…'); tick();

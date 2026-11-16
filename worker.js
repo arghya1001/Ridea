@@ -1,10 +1,7 @@
 // Ridea backend — Cloudflare Worker using Workers AI (free: 10,000 neurons/day, no card).
 // On the Workers Free plan, requests simply fail after the daily limit — you are never charged.
-const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";          // fallback
-const REF_MODEL = "@cf/black-forest-labs/flux-2-klein-4b";           // accepts reference images -> consistent characters
+const IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell";
 const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"; // change if Cloudflare retires it
-const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";                  // checks that every subject is really in each picture
-const DIRECTOR_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"; // smarter "film director" for /scenes; falls back to TEXT_MODEL
 
 // ---- AI video (free GPUs: Kaggle / Colab notebooks, no credit card) ---------------
 // A free GPU notebook (ridea_video_worker.ipynb) runs LTX-Video and registers its public
@@ -12,7 +9,7 @@ const DIRECTOR_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"; // smarter "f
 // quietly falls back to the free storybook. Flow:  app -> /video (submit) -> /video-result (poll).
 // Needs: a KV namespace bound as RIDEA_KV, and a secret named RIDEA_TOKEN (any password).
 const PROVIDERS = ["KAGGLE", "COLAB"];     // names the notebook uses (it picks automatically)
-const DEFAULT_CLIPS_PER_USER_DAY = 40;     // 40 clips = 10 films per person per day (the GPU is yours, so this is generous)
+const DEFAULT_CLIPS_PER_USER_DAY = 8;      // 8 clips = 2 films per person per day
 
 const coolMem = new Map();                 // fallback cooldown when KV is slow
 const dayKey = () => new Date().toISOString().slice(0, 10);
@@ -78,28 +75,10 @@ export default {
 
     try {
       if (path === "/image") {
-        const prompt = String(body.prompt || "").slice(0, 1500);
+        const prompt = String(body.prompt || "").slice(0, 500);
         if (!prompt) return send({ error: "Describe the image first" }, 400);
-        const W = Math.min(1024, Math.max(256, (parseInt(body.w) || 1024) & ~15)), H = Math.min(1024, Math.max(256, (parseInt(body.h) || 1024) & ~15));
-        const ref = String(body.ref || "");
-        if (ref.length > 300000) return send({ error: "Reference too large" }, 413);
-        const tail = ". Sharp, clean image, no text, watermark, signature or logo.";
-        try {   // best quality: FLUX.2 klein, optionally conditioned on the first scene's picture
-          const form = new FormData();
-          form.append("prompt", prompt + tail);
-          form.append("width", String(W)); form.append("height", String(H));
-          if (body.seed) form.append("seed", String(parseInt(body.seed) || 1));
-          if (ref) {
-            const bin = atob(ref), u8 = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-            form.append("input_image_0", new Blob([u8], { type: "image/jpeg" }));
-          }
-          const fr = new Response(form);
-          const out = await env.AI.run(REF_MODEL, { multipart: { body: fr.body, contentType: fr.headers.get("content-type") } });
-          if (out && out.image) return send({ image: out.image, model: "klein" });
-        } catch (e) { if (/limit|quota|neuron|capacity/i.test(String(e))) throw e; }
-        const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt.slice(0, 500) + tail, steps: 4 });   // fallback: no reference
-        return send({ image: out.image, model: "schnell" });
+        const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt + ". Clean image, no text, watermark, signature or logo.", steps: 4 });
+        return send({ image: out.image });
       }
       if (path === "/concept") {
         const topic = String(body.topic || "").slice(0, 200);
@@ -138,42 +117,20 @@ export default {
         return send({ lines });
       }
       if (path === "/scenes") {
-        const idea = String(body.idea || "").slice(0, 300);
+        const idea = String(body.idea || "").slice(0, 200);
         if (!idea) return send({ error: "Describe your film idea first" }, 400);
-        const sys = `You are an award-winning film director and screenwriter. The user gives a very short idea. Work out what they really want, then plan a 4-scene mini film (13 seconds) with a clear beginning, middle and end.
-Reply with ONLY one JSON object: {"sheet": "...", "subjects": ["..."], "scenes": [{"caption": "...", "visual": "...", "motion": "..."}, ...4 items]}.
-"subjects": one short phrase (under 15 words) for each main subject, using the same species wording as the sheet, written so a person could check a picture against it, for example "a real adult lion, an animal with a golden mane" and "a human baby with no fur and no mane".
-"sheet": one paragraph of 40-70 words describing every main subject in precise visual detail and the single setting and time of day. Start each subject with its species in plain words and say what it is NOT, so subjects never blend (for example: "a human baby with smooth human skin and curly brown hair, no fur, no mane, no animal ears or tail, wearing a yellow onesie" and "a real adult male lion, an animal with four legs, a shaggy golden mane and brown fur"). Give each subject a different dominant color so they stay easy to tell apart.
-Each scene: "caption" = one complete warm narration sentence of 6-12 words that tells what happens (never a label like "Arrival" or "Gentle ending"). "visual" = 45-60 words for an image generator: restate the subject details from the sheet word for word, then give the shot type (wide or medium only), camera angle, lighting, emotion and ONE simple natural action. No text in the image. "motion" = 12-22 words of lively but natural movement that fits the scene, for example: the lion walks slowly forward with calm steady steps while the baby stays seated on its back, smiles and looks up at the trees and birds, leaves sway in the wind.
-Rules: SCENE 1 is the reference picture for every later scene, so it MUST be a wide or full-body medium shot in plain even light where every subject is completely visible, head to toe, clearly separate from each other, with the whole animal and the whole person in frame (never a close-up, never a face-only shot). In every scene, repeat the species wording from the sheet for each subject (the human stays human, the animal stays an animal, never mix their features). EVERY scene must show ALL subjects named in the idea together, fully visible, doing exactly what the idea says (for example if a baby rides a lion, the baby sits on the back of the lion in every scene). Never hide, crop out or replace a subject, and add no new main characters. The 4 scenes must NOT look alike: change the shot type (for example wide establishing, medium, low angle, close two-shot), the camera angle, the part of the setting (path, river, clearing, hilltop) and the light (morning mist, midday sun, golden hour, dusk) from scene to scene, while the subjects keep exactly the same look. Show story progress this way. In the motion line everyone stays in the frame and together (a rider always stays seated), nobody turns their back to the camera, runs, jumps or falls, no new main subject appears (only leaves, birds and light in the background), and the camera follows gently.`;
-        const run = async model => {
-          const out = await env.AI.run(model, { max_tokens: 1800, messages: [{ role: "system", content: sys }, { role: "user", content: `Idea: ${idea}` }] });
-          const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
-          const obj = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
-          const scenes = (obj.scenes || []).slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 520), motion: String(x.motion || "").slice(0, 200) }));
-          if (scenes.length < 4) throw new Error("bad scenes");
-          return { scenes, sheet: String(obj.sheet || "").slice(0, 600), subjects: (Array.isArray(obj.subjects) ? obj.subjects : []).slice(0, 4).map(s => String(s).slice(0, 160)).filter(Boolean) };
-        };
-        let res;
-        try { res = await run(DIRECTOR_MODEL); } catch (e) { res = await run(TEXT_MODEL); }
-        return send(res);
-      }
-      if (path === "/check") {          // vision check: is every required subject really in the picture?
-        const image = String(body.image || "");
-        const subjects = (Array.isArray(body.subjects) ? body.subjects : []).slice(0, 4).map(s => String(s).slice(0, 160)).filter(Boolean);
-        if (!image || !subjects.length) return send({ ok: true, missing: [] });
-        if (image.length > 600000) return send({ error: "Image too large" }, 413);
-        const bin = atob(image), bytes = new Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        const missing = [];
-        await Promise.all(subjects.map(async s => {
-          try {
-            const out = await env.AI.run(VISION_MODEL, { image: bytes, max_tokens: 8, prompt: `Look carefully at this picture. Is there ${s} clearly visible in it? Answer only YES or NO.` });
-            const a = String(out.description || out.response || "");
-            if (!/^\W*yes/i.test(a)) missing.push(s);
-          } catch (e) { /* vision model unavailable: do not block the film */ }
-        }));
-        return send({ ok: missing.length === 0, missing });
+        const out = await env.AI.run(TEXT_MODEL, {
+          max_tokens: 800,
+          messages: [
+            { role: "system", content: 'You write 4-scene mini stories for a 13-second film. Reply with ONLY a JSON array of exactly 4 objects: {"caption": warm narration, max 12 words, "visual": a concrete image description for an illustrator, max 30 words, no text in the image, \"motion\": ONE calm sentence, max 25 words, describing only small gentle movement of things already in the picture (a blink, a slow head turn, swaying leaves, drifting light, a slow camera push-in), no big actions, no transformations, no new objects}. No other text.' },
+            { role: "user", content: `Story idea: ${idea}` },
+          ],
+        });
+        const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
+        const arr = JSON.parse(raw.slice(raw.indexOf("["), raw.lastIndexOf("]") + 1));
+        const scenes = arr.slice(0, 4).filter(x => x && x.caption && x.visual).map(x => ({ caption: String(x.caption).slice(0, 90), visual: String(x.visual).slice(0, 240), motion: String(x.motion || "").slice(0, 220) }));
+        if (scenes.length < 4) throw new Error("bad scenes");
+        return send({ scenes });
       }
       if (path === "/video-status") {
         const cap = parseInt(env.CLIPS_PER_USER_DAY) || DEFAULT_CLIPS_PER_USER_DAY;
@@ -184,6 +141,7 @@ Rules: SCENE 1 is the reference picture for every later scene, so it MUST be a w
       }
       if (path === "/video") {          // submit one clip; returns {id, provider} right away
         const prompt = String(body.prompt || "").slice(0, 300);
+        const motion = String(body.motion || "").slice(0, 250);
         const image = String(body.image || "");
         if (!prompt || !image) return send({ error: "Missing image or prompt" }, 400);
         if (image.length > 400000) return send({ error: "Image too large" }, 413);
@@ -196,7 +154,7 @@ Rules: SCENE 1 is the reference picture for every later scene, so it MUST be a w
             const up = await fetch(p.url + "/submit", {
               method: "POST",
               headers: { "Content-Type": "application/json", "X-Token": env.RIDEA_TOKEN || "" },
-              body: JSON.stringify({ image, prompt }),
+              body: JSON.stringify({ image, prompt, motion }),
               signal: AbortSignal.timeout(25000),
             });
             if (!up.ok) { try { await up.body?.cancel(); } catch {} await cool(env, p.name, up.status); continue; }
