@@ -136,21 +136,26 @@ export default {
         const W = Math.min(1024, Math.max(256, (parseInt(body.w) || 1024) & ~15)), H = Math.min(1024, Math.max(256, (parseInt(body.h) || 1024) & ~15));
         const ref = String(body.ref || "");
         if (ref.length > 300000) return send({ error: "Reference too large" }, 413);
+        const refs = (Array.isArray(body.refs) ? body.refs : (ref ? [ref] : [])).slice(0, 3).map(String).filter(r => r && r.length <= 300000);
         const tail = ". Sharp, clean image, no text, watermark, signature or logo.";
-        try {   // best quality: FLUX.2 klein, optionally conditioned on the first scene's picture
+        const tryKlein = async list => {   // best quality: FLUX.2 klein, conditioned on one or more reference pictures
           const form = new FormData();
           form.append("prompt", prompt + tail);
           form.append("width", String(W)); form.append("height", String(H));
           if (body.seed) form.append("seed", String(parseInt(body.seed) || 1));
-          if (ref) {
-            const bin = atob(ref), u8 = new Uint8Array(bin.length);
+          list.forEach((r, k) => {
+            const bin = atob(r), u8 = new Uint8Array(bin.length);
             for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-            form.append("input_image_0", new Blob([u8], { type: "image/jpeg" }));
-          }
+            form.append("input_image_" + k, new Blob([u8], { type: "image/jpeg" }));
+          });
           const fr = new Response(form);
           const out = await env.AI.run(REF_MODEL, { multipart: { body: fr.body, contentType: fr.headers.get("content-type") } });
-          if (out && out.image) return send({ image: out.image, model: "klein" });
-        } catch (e) { if (/limit|quota|neuron|capacity/i.test(String(e))) throw e; }
+          return out && out.image ? out.image : null;
+        };
+        for (const list of (refs.length > 1 ? [refs, refs.slice(0, 1)] : [refs])) {   // several references first; if the model refuses them, use just the first
+          try { const img = await tryKlein(list); if (img) return send({ image: img, model: "klein", refs: list.length }); }
+          catch (e) { if (/limit|quota|neuron|capacity/i.test(String(e))) throw e; }
+        }
         const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt.slice(0, 500) + tail, steps: 4 });   // fallback: no reference
         return send({ image: out.image, model: "schnell" });
       }
@@ -233,17 +238,18 @@ export default {
         // The model only fills in a small "story bible"; the CODE then builds every image prompt from it,
         // so the same characters, costume, props and place are repeated word for word in all 4 scenes.
         const sys = `You are a film director planning a 4-scene mini film (13 seconds). The user gives a short idea (and maybe an approved story and script). An image generator will paint each scene from your words alone and knows NOTHING about the story, so every scene needs a complete shot sheet that says who is visible, exactly where each one stands, what each hand holds, and what is NOT in the picture. Reply with ONLY one JSON object:
-{"story":"...","plan":"...","characters":[{"name":"...","short":"...","look":"..."}],"setting":"...","beats":[{"caption":"...","camera":"...","backdrop":"...","positions":[{"who":"...","where":"...","facing":"...","pose":"...","hands":"...","face":"..."}],"props":"...","absent":["..."],"light":"...","must_show":["..."],"motion":"..."}]}
+{"story":"...","plan":"...","characters":[{"name":"...","short":"...","look":"..."}],"objects":[{"name":"...","look":"..."}],"setting":"...","beats":[{"caption":"...","camera":"...","backdrop":"...","positions":[{"who":"...","where":"...","facing":"...","pose":"...","hands":"...","face":"..."}],"props":"...","absent":["..."],"light":"...","must_show":["..."],"motion":"..."}]}
 "story": 4 short sentences with beginning, middle and end, naming the characters and the one fixed place. If an approved story or script is given, keep its characters, place and events exactly and make the 4 beats follow it in order.
 "plan": one short sentence saying what you adapted to make the idea drawable, or an empty string.
-"characters": 1 to 3 main characters (animals and important objects count too). Short unique names. "short" = under 15 words a person could use to check a picture. "look" = 25-35 words of exact visual detail: species in plain words and what it is NOT (for example "human baby, no fur, no tail"), age, hair or fur, and the full costume and props with exact counts and colors. If the idea names a role (magician, chef, knight, astronaut...), the look MUST include that role's recognisable costume and prop (a magician: tall black top hat, black cape with red lining, white gloves, small wand). Give each character a different dominant color. Adapt physically awkward ideas (a baby on a bike becomes a toddler in a helmet on a tricycle).
+"characters": 1 to 3 main characters (animals and important objects count too). Short unique names. "short" = under 15 words a person could use to check a picture. "look" = 25-35 words of exact visual detail: species in plain words and what it is NOT (for example "human baby, no fur, no tail"), age, hair or fur, and the full costume and props with exact counts and colors. If the idea names a role (magician, chef, knight, astronaut...), the look MUST include that role's recognisable costume and prop (a magician: tall black top hat, black cape with red lining, white gloves, small wand). Give each character a different dominant color and 2 unmistakable identifying marks (for example a rabbit: pure white fur with one black patch around the left eye and a red ribbon on its neck; a girl: a yellow dress with a green handbag) and always repeat the same marks exactly. Adapt physically awkward ideas (a baby on a bike becomes a toddler in a helmet on a tricycle).
+"objects": the 1-2 story-critical props (the hat, the box, the ball...). "name" = a plain unique name. "look" = 15-25 words: exact shape, size, color, material and state (for example "a tall black silk top hat, a cylinder with a flat round brim, held upside down with its wide opening facing up, empty"). Each object must be UNIQUE: no character wears or carries another object of the same kind, so a picture can never mix them up (a magician who pulls a rabbit from a hat has exactly ONE hat: in a beat where she holds it out to show it is empty, or pulls the rabbit from it, the hat is in her hands and her head is bare; she never wears a second hat while holding it; the rabbit never comes from a box or case). Repeat the object word for word in the beats.
 "setting": one fixed place with 4 fixed visible elements and a time of day, 20-30 words, matching the idea (a circus magician: a circus ring with a red and white striped tent, a sawdust floor, a bright spotlight and a red curtain). The place never changes between scenes.
 "beats": exactly 4, following the story in order. For each beat:
 "caption" = one warm sentence of 6-12 words describing ONLY what is visible in that picture.
 "camera" = shot size, angle and height, for example "wide full-body shot, eye level, camera 4 metres away" (beat 1 must be wide or medium full-body so every character is fully visible; beats 2-4 must use a clearly different camera from beat 1, for example low angle, side view, closer medium shot).
 "backdrop" = which setting elements are visible behind the characters and where in the frame (for example "striped tent wall fills the background, red curtain on the right, spotlight cone from the top left").
 "positions" = one entry for EVERY character visible in this picture, and no one else. "who" = the character's name. "where" = exact place in the frame and on the floor, using left, center, right, near, far and what they are next to (for example "center of the frame, standing on the sawdust one step in front of the red curtain"). "facing" = toward the camera, to the left, to the right, or at another character. "pose" = exact body pose. "hands" = exactly what each hand holds or does. "face" = the expression.
-"props" = the exact position and state of the key objects, for example "the black top hat is held open at chest height with the opening facing the camera, completely empty". The object the story is about must stay visible in every beat where it matters (for a rabbit from a hat: beat 1 the empty open hat, beat 2 the wand raised above the open hat, beat 3 the rabbit's ears and head rising out of the hat's opening with the hat in frame, beat 4 the rabbit out in the open).
+"props" = the exact position and state of the key objects, for example "she has taken the black top hat off her head and tilts it toward the camera at chest height so its empty inside is clearly visible, her head bare". The object the story is about must stay visible in every beat where it matters (for a rabbit from a hat: beat 1 the empty open hat, beat 2 the wand raised above the open hat, beat 3 the rabbit's ears and head rising out of the hat's opening with the hat in frame, beat 4 the rabbit out in the open).
 "absent" = things or characters that must NOT appear in this picture. A character who has not appeared yet in the story must be listed here and must not be in positions (the rabbit is absent in beats 1 and 2).
 "light" = a few words (for example "warm spotlight from the top left, soft shadows").
 "must_show" = 2-4 short things that MUST be visible.
@@ -261,6 +267,7 @@ export default {
           const looks = (c, n) => (c.name ? String(c.name).slice(0, 20) + ": " : "") + String(c.look).slice(0, n);
           const charTxt = chars.map(c => looks(c, 210)).join(" ");
           const t = (x, n) => String(x || "").trim().slice(0, n);
+          const objs = (Array.isArray(obj.objects) ? obj.objects : []).slice(0, 2).filter(o => o && o.name && o.look).map(o => `${t(o.name, 30)}: ${t(o.look, 150)}`).join(" ");
           const scenes = beats.map(b => {
             const posList = (Array.isArray(b.positions) ? b.positions : []).filter(p => p && p.who).slice(0, 3);
             if (!posList.length) throw new Error("bad plan");
@@ -268,17 +275,18 @@ export default {
             const detail = n => posList.map(p => { const c = findChar(p.who); return `${c ? looks(c, n) : t(p.who, 30)}. Position: ${t(p.where, 110)}, facing ${t(p.facing, 30)}. Pose: ${t(p.pose, 140)}. Hands: ${t(p.hands, 140)}. Face: ${t(p.face, 30)}.`; }).join(" ");
             const absent = (Array.isArray(b.absent) ? b.absent : []).slice(0, 4).map(s => t(s, 40)).filter(Boolean).join(", ");
             const must = (Array.isArray(b.must_show) ? b.must_show : []).slice(0, 4).map(s => t(s, 50)).filter(Boolean).join(", ");
-            const common = `Key objects: ${t(b.props, 160)}.${must ? " Must be clearly visible: " + must + "." : ""} Light: ${t(b.light, 60)}.${absent ? " NOT in the picture: " + absent + "." : ""}`;
+            const common = `${objs ? "Key object details: " + objs + ". " : ""}Key objects in this picture: ${t(b.props, 160)}.${must ? " Must be clearly visible: " + must + "." : ""} Light: ${t(b.light, 60)}.${absent ? " NOT in the picture: " + absent + "." : ""}`;
             return {
               caption: t(b.caption, 90),
               visual: `Camera: ${t(b.camera, 90)}. Setting: ${setting.replace(/[.\s]+$/, "")}. Visible behind: ${t(b.backdrop, 140)}. ${detail(170)} ${common} Every character listed is fully visible. No text in the image.`.slice(0, 2000),
               edit: `Camera: ${t(b.camera, 90)}. Visible behind: ${t(b.backdrop, 140)}. ${detail(90)} ${common}`.slice(0, 1700),   // used when a reference picture exists: written as an edit
+              present: (here.length ? here : chars).map(c => String(c.name || "").slice(0, 30)),
               subjects: (here.length ? here : chars).map(c => String(c.short || c.look).slice(0, 120)),
               motion: t(b.motion, 400),
             };
           });
           const plan = String(obj.plan || "").slice(0, 160);
-          const sheet = ((plan ? "Plan: " + plan + " " : "") + charTxt + " Setting: " + setting).slice(0, 900);
+          const sheet = ((plan ? "Plan: " + plan + " " : "") + charTxt + (objs ? " Objects: " + objs : "") + " Setting: " + setting).slice(0, 900);
           const subjects = chars.map(c => String(c.short || c.look).slice(0, 120));
           return { scenes, story: String(obj.story || story || "").slice(0, 1200), sheet, subjects };
         };

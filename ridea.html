@@ -1736,8 +1736,17 @@
       const SHOTS = ['', 'Same place and same background elements as the reference, camera moved to a medium side view. ', 'Same place and same background elements as the reference, camera lower, looking up at them. ', 'Same place and same background elements as the reference, wide shot from slightly behind. '];
       const EDIT_PRE = 'Edit the reference picture: keep the same people, animals, costumes, place and art style, but change the pose, the camera and what is happening, as described. ';
       const REFP2 = 'Keep the same characters as in the reference image (same faces, fur, hair, clothes and colors, each its own species), but do NOT copy its camera angle, pose or background.';
+      const toRef = im => { try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(im, 0, 0, 360, 480); return c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){ return null; } };
+      // a character that first appears after scene 1 (for example a rabbit) is not in the scene-1 reference, so also show the latest picture that contains it
+      const pickRefs = i => {
+        const out = refB64 ? [refB64] : [], low = a => (a || []).map(x => String(x).toLowerCase());
+        const P0 = low(scenes[0].present), late = (scenes[i].present || []).filter(n => !P0.includes(String(n).toLowerCase()));
+        if(late.length) for(let j = i - 1; j >= 1; j--){ const Pj = low(scenes[j].present); if(imgs[j] && late.every(n => Pj.includes(String(n).toLowerCase()))){ const r = toRef(imgs[j]); if(r) out.push(r); return {refs: out, late}; } }
+        return {refs: out, late: []};
+      };
       const paintScene = async (i, sd, preset) => {
-        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 && scenes[i].edit ? EDIT_PRE + styled(scenes[i].edit) : i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
+        const pr = i > 0 && refB64 ? pickRefs(i) : {refs: [], late: []};
+        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 && scenes[i].edit ? EDIT_PRE + (pr.refs.length > 1 ? 'The second reference picture shows how ' + pr.late.join(' and ') + ' look: keep ' + pr.late.join(' and ') + ' identical to it. ' : '') + styled(scenes[i].edit) : i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined, refs: pr.refs.length > 1 ? pr.refs : undefined});
         if(i === 0) firstB64 = j.image;
         imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
         if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
