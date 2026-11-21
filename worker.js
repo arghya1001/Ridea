@@ -275,11 +275,11 @@ export default {
             const detail = n => posList.map(p => { const c = findChar(p.who); return `${c ? looks(c, n) : t(p.who, 30)}. Position: ${t(p.where, 110)}, facing ${t(p.facing, 30)}. Head: ${t(p.head, 60)}. Pose: ${t(p.pose, 140)}. Hands: ${t(p.hands, 140)}. Face: ${t(p.face, 30)}.`; }).join(" ");
             const absent = (Array.isArray(b.absent) ? b.absent : []).slice(0, 4).map(s => t(s, 40)).filter(Boolean).join(", ");
             const must = (Array.isArray(b.must_show) ? b.must_show : []).slice(0, 4).map(s => t(s, 50)).filter(Boolean).join(", ");
-            const common = `${objs ? "Key object details: " + objs + ". " : ""}Key objects in this picture: ${t(b.props, 160)}.${must ? " Must be clearly visible: " + must + "." : ""} Light: ${t(b.light, 60)}.${absent ? " NOT in the picture: " + absent + "." : ""}`;
+            const common = `${objs ? "Key object details: " + objs + ". " : ""}Key objects in this picture: ${t(b.props, 160)}.${must ? " Must be clearly visible: " + must + "." : ""} Light: ${t(b.light, 60)}.`;
             return {
               caption: t(b.caption, 90),
-              visual: `Camera: ${t(b.camera, 90)}. Setting: ${setting.replace(/[.\s]+$/, "")}. Visible behind: ${t(b.backdrop, 140)}. ${detail(170)} ${common} Every character listed is fully visible. No text in the image.`.slice(0, 2000),
-              edit: `Camera: ${t(b.camera, 90)}. Visible behind: ${t(b.backdrop, 140)}. ${detail(90)} ${common}`.slice(0, 1700),   // used when a reference picture exists: written as an edit
+              visual: `What happens: ${t(b.caption, 90)}. Camera: ${t(b.camera, 90)}. Setting: ${setting.replace(/[.\s]+$/, "")}. Visible behind: ${t(b.backdrop, 140)}. ${detail(170)} ${common} Every character listed is fully visible. No text in the image.`.slice(0, 2000),
+              edit: `What happens: ${t(b.caption, 90)}. Camera: ${t(b.camera, 90)}. Visible behind: ${t(b.backdrop, 140)}. ${detail(90)} ${common}`.slice(0, 1700),   // used when a reference picture exists: written as an edit
               absent: (Array.isArray(b.absent) ? b.absent : []).slice(0, 4).map(s => t(s, 40)).filter(Boolean),
               present: (here.length ? here : chars).map(c => String(c.name || "").slice(0, 30)),
               subjects: (here.length ? here : chars).map(c => String(c.short || c.look).slice(0, 120)),

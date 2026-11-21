@@ -1733,10 +1733,11 @@
       const imgs = []; let firstB64 = null, refB64 = null; const seed = 1 + Math.floor(Math.random()*999999);
       const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible, doing the action described below. Do NOT copy the composition of the reference: use a clearly different camera angle, framing, pose and background, as described below. New scene: ';
       const WIDE1 = 'Wide full-body shot, every subject completely visible and doing the action described below exactly as stated, even natural light. ';
-      const SHOTS = ['', 'Same place and same background elements as the reference, camera moved to a medium side view. ', 'Same place and same background elements as the reference, camera lower, looking up at them. ', 'Same place and same background elements as the reference, wide shot from slightly behind. '];
-      const EDIT_PRE = 'Edit the reference picture: keep the same people, animals, costumes, place and art style, but change the pose, the camera and what is happening, as described. ';
+      const SHOTS = ['', 'Medium shot from the characters\' left side in three-quarter view, camera 2 metres away, subjects fill the frame. ', 'Low-angle shot, camera near the ground looking up at the subjects, big sky or ceiling behind them. ', 'Over-the-shoulder shot from behind one character, looking toward the others, a different part of the same place in the background. '];
+      const CAMS = SHOTS;
+      const EDIT_PRE = 'Use the reference picture ONLY for how the characters and the place look (same faces, hair, fur, costumes, colors, art style). Paint a NEW picture with a completely different composition: ';
       const REFP2 = 'Keep the same characters as in the reference image (same faces, fur, hair, clothes and colors, each its own species), but do NOT copy its camera angle, pose or background.';
-      const toRef = im => { try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(im, 0, 0, 360, 480); return c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){ return null; } };
+      const toRef = im => { try{ const c = document.createElement('canvas'); c.width = 480; c.height = 640; c.getContext('2d').drawImage(im, 0, 0, 480, 640); return c.toDataURL('image/jpeg', .88).split(',')[1]; }catch(e){ return null; } };
       // a character that first appears after scene 1 (for example a rabbit) is not in the scene-1 reference, so also show the latest picture that contains it
       const pickRefs = i => {
         const out = refB64 ? [refB64] : [], low = a => (a || []).map(x => String(x).toLowerCase());
@@ -1746,15 +1747,18 @@
       };
       const paintScene = async (i, sd, preset) => {
         const pr = i > 0 && refB64 ? pickRefs(i) : {refs: [], late: []};
-        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 && scenes[i].edit ? EDIT_PRE + (pr.refs.length > 1 ? 'The second reference picture shows how ' + pr.late.join(' and ') + ' look: keep ' + pr.late.join(' and ') + ' identical to it. ' : '') + styled(scenes[i].edit) : i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined, refs: pr.refs.length > 1 ? pr.refs : undefined});
+        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 && scenes[i].edit ? EDIT_PRE + CAMS[i] + (pr.refs.length > 1 ? 'The second reference picture shows how ' + pr.late.join(' and ') + ' look: keep ' + pr.late.join(' and ') + ' identical to it. ' : '') + styled(scenes[i].edit) : i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined, refs: pr.refs.length > 1 ? pr.refs : undefined});
         if(i === 0) firstB64 = j.image;
         imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
-        if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
+        if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 480; c.height = 640; c.getContext('2d').drawImage(imgs[0], 0, 0, 480, 640); refB64 = c.toDataURL('image/jpeg', .88).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
       };
       // consistency gate: a vision model checks every subject is really in each picture; failures are repainted automatically
       const bad = new Set();
       const sideBySide = (a, b) => { const c = document.createElement('canvas'); c.width = 768; c.height = 512; const g = c.getContext('2d'); g.drawImage(a, 0, 0, 384, 512); g.drawImage(b, 384, 0, 384, 512); return c.toDataURL('image/jpeg', .8).split(',')[1]; };
+      const fp = im => { const c = document.createElement('canvas'); c.width = 24; c.height = 32; const g = c.getContext('2d'); g.drawImage(im, 0, 0, 24, 32); const d = g.getImageData(0, 0, 24, 32).data, o = []; for(let p = 0; p < d.length; p += 4) o.push(d[p] * .3 + d[p+1] * .59 + d[p+2] * .11); return o; };
+      const tooSimilar = i => { try{ const a = fp(imgs[i]); for(let k = 0; k < i; k++){ const b = fp(imgs[k]); let s = 0; for(let q = 0; q < a.length; q++) s += Math.abs(a[q] - b[q]); if(s / a.length < 22) return k; } }catch(e){} return -1; };
       const checkImg = async i => {
+        const dup = i > 0 ? tooSimilar(i) : -1; if(dup >= 0) return {ok: false, missing: [], reason: 'almost the same picture as scene ' + (dup + 1)};
         // 1) every required subject is present (when the planner gave a list)
         const sj = scenes[i] && scenes[i].subjects && scenes[i].subjects.length ? scenes[i].subjects : subjects;
         if(sj.length){
@@ -1774,7 +1778,7 @@
       const paintChecked = async (i, sd, preset) => {
         let r = {ok: true, missing: []};
         for(let t = 0; t < 3 && alive; t++){
-          await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd, t ? undefined : preset);
+          if(t && r.reason && /almost the same/.test(r.reason)) CAMS[i] = 'COMPLETELY DIFFERENT VIEWPOINT from the reference, camera clearly moved, characters in new positions and poses. ' + SHOTS[i]; await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd, t ? undefined : preset);
           st(`Checking scene ${i + 1} for consistency…`);
           r = await checkImg(i);
           if(r.ok){ bad.delete(i); return; }
@@ -1801,7 +1805,7 @@
       for(let i = 0; i < FN && alive; i++){
         if(i === 0){ let pre; try{ pre = await pickAnchor(); }catch(e){} if(!alive) return; st('Painting scene 1 of ' + FN + '…'); await paintChecked(0, seed, pre); continue; }
         st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
-        await paintChecked(i, seed);
+        await paintChecked(i, seed + i * 7919);
       }
       if(!alive) return;
       // ---- review step: look at the paintings first, repaint any you dislike, then choose motion or not ----
