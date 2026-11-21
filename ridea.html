@@ -1711,8 +1711,10 @@
       const imgs = []; let firstB64 = null, refB64 = null; const seed = 1 + Math.floor(Math.random()*999999);
       const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible, doing the action described below. Do NOT copy the composition of the reference: use a clearly different camera angle, framing, pose and background, as described below. New scene: ';
       const WIDE1 = 'Wide full-body shot, every subject completely visible and doing the action described below exactly as stated, even natural light. ';
-      const paintScene = async (i, sd) => {
-        const j = await api('/image', {prompt: (i > 0 && refB64 ? REFP : i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
+      const SHOTS = ['', 'New camera angle: medium side view from the left, a different part of the setting behind them. ', 'New camera angle: low angle looking up at them, different background and warmer light. ', 'New camera angle: wide shot from slightly behind, a different spot in the setting, soft golden light. '];
+      const REFP2 = 'Keep the same characters as in the reference image (same faces, fur, hair, clothes and colors, each its own species), but do NOT copy its camera angle, pose or background.';
+      const paintScene = async (i, sd, preset) => {
+        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
         if(i === 0) firstB64 = j.image;
         imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
         if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
@@ -1724,7 +1726,7 @@
         // 1) every required subject is present (when the planner gave a list)
         if(subjects.length){
           try{ const c = document.createElement('canvas'); c.width = 384; c.height = 512; c.getContext('2d').drawImage(imgs[i], 0, 0, 384, 512);
-            const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects}); if(!r.ok) return r; }catch(e){}
+            const who = subjects.length > 1 ? subjects.slice(0, -1) : subjects; const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects: who}); if(!r.ok) return r; }catch(e){}
         }
         // 2) pairwise: scene 2 vs scene 1, scene 3 vs scene 1 and scene 2, scene 4 vs scene 1 and scene 3 (needs no planner)
         if(i > 0){
@@ -1736,18 +1738,35 @@
         }
         return {ok: true};
       };
-      const paintChecked = async (i, sd) => {
+      const paintChecked = async (i, sd, preset) => {
         let r = {ok: true, missing: []};
-        for(let t = 0; t < 4 && alive; t++){
-          await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd);
+        for(let t = 0; t < 3 && alive; t++){
+          await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd, t ? undefined : preset);
           st(`Checking scene ${i + 1} for consistency…`);
           r = await checkImg(i);
           if(r.ok){ bad.delete(i); return; }
-          if(t < 3) st(`Scene ${i + 1} failed the check (${(r.missing || []).length ? 'missing: ' + r.missing.join('; ') : r.reason || 'inconsistent'}). Repainting, try ${t + 2} of 4…`);
+          if(t < 2) st(`Scene ${i + 1} failed the check (${(r.missing || []).length ? 'missing: ' + r.missing.join('; ') : r.reason || 'inconsistent'}). Repainting, try ${t + 2} of 3…`);
         }
         bad.add(i);
       };
+      // scene 1 is the character reference for the whole film, so the user picks the better of two versions
+      const pickAnchor = async () => {
+        const cands = [];
+        for(let k = 0; k < 2 && alive; k++){
+          st(`Painting two versions of scene 1 (${k + 1} of 2)… you will pick the better one`);
+          try{ const j = await api('/image', {prompt: WIDE1 + styled(scenes[0].visual), w: 768, h: 1024, seed: k ? 1 + Math.floor(Math.random()*999999) : seed}); cands.push(j.image); }catch(e){ if(!cands.length) throw e; }
+        }
+        if(!alive || cands.length < 2) return cands[0];
+        return await new Promise(resolve => {
+          wake = () => resolve(cands[0]);
+          const box = document.createElement('div'); box.style.cssText = 'display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:min(100%,360px)';
+          cands.forEach(b64 => { const t = document.createElement('img'); t.src = 'data:image/png;base64,' + b64; t.style.cssText = 'width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;cursor:pointer'; t.onclick = () => { box.remove(); cv.style.display = ''; wake = null; resolve(b64); }; box.appendChild(t); });
+          cv.style.display = 'none'; cv.after(box);
+          st('Tap the version that matches your idea best. The other scenes will copy it.');
+        });
+      };
       for(let i = 0; i < FN && alive; i++){
+        if(i === 0){ let pre; try{ pre = await pickAnchor(); }catch(e){} if(!alive) return; st('Painting scene 1 of ' + FN + '…'); await paintChecked(0, seed, pre); continue; }
         st(`Painting scene ${i + 1} of ${FN}… (about 15 seconds each)`);
         await paintChecked(i, seed);
       }
