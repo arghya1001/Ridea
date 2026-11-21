@@ -1598,12 +1598,34 @@
         go.onclick = () => { const v = ta.value.trim() || text; rv.remove(); cv.style.display = ''; wake = null; resolve(v); };
       });
       if(!script){
-        // Stage 1: concept -> story
-        st('Writing your story…');
-        try{ story = (await api('/story', {idea})).story || ''; }catch(e){ showToast(e.message || 'Story step failed. Using your idea.'); }
+        // Stage 1: concept -> several story versions to choose from (or write your own)
+        st('Writing story ideas…');
+        let opts = [], own = false;
+        try{ opts = (await api('/stories', {idea})).stories || []; }catch(e){}
         if(!alive) return;
-        story = await askText('Step 1 of 5 · Your story', story || idea, 'Write the script →', 'Your idea became a story. Edit anything, then continue.');
+        if(opts.length){
+          const pick = await new Promise(resolve => {
+            wake = resolve;
+            const rv = document.createElement('div'); rv.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:min(100%,420px);max-height:72vh;overflow:auto';
+            const h1 = document.createElement('div'); h1.textContent = 'Step 1 of 5 · Pick a story'; h1.style.cssText = 'color:#fff;font:600 14px Inter,sans-serif';
+            rv.appendChild(h1);
+            const fin = v => { rv.remove(); cv.style.display = ''; wake = null; resolve(v); };
+            opts.forEach(o => { const card = document.createElement('div'); card.style.cssText = 'border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.07);border-radius:12px;padding:10px;cursor:pointer';
+              const t = document.createElement('div'); t.textContent = o.title; t.style.cssText = 'color:#fff;font:600 13px Inter,sans-serif;margin-bottom:4px';
+              const s = document.createElement('div'); s.textContent = o.story; s.style.cssText = 'color:#e6e1ff;font:400 12.5px/1.45 Inter,sans-serif';
+              card.append(t, s); card.onclick = () => fin(o.story); rv.appendChild(card); });
+            const mine = document.createElement('button'); mine.className = 'generate-btn'; mine.textContent = 'Write my own story'; mine.style.cssText = 'padding:12px 20px;border-radius:12px;align-self:center;margin-top:4px'; mine.onclick = () => fin('');
+            rv.appendChild(mine); cv.style.display = 'none'; cv.after(rv); st('Tap the story you like best, or write your own.');
+          });
+          if(!alive) return;
+          story = pick; own = !pick;
+        }else{
+          try{ story = (await api('/story', {idea})).story || ''; }catch(e){ showToast(e.message || 'Story step failed. Using your idea.'); }
+          if(!alive) return;
+        }
+        story = await askText('Step 1 of 5 · Your story', story, 'Write the script →', own ? 'Write your story here, then continue.' : 'You can edit anything, then continue.');
         if(!alive) return;
+        story = story || idea;
         // Stage 2: story -> script
         st('Writing the script…');
         let lines = null; try{ lines = (await api('/script', {topic: idea, story: story.slice(0, 1500), premise: {title: idea.slice(0, 40), blurb: story.slice(0, 300)}, withDialogue: false, length: 'Short'})).lines; }catch(e){}
@@ -1711,7 +1733,7 @@
       const imgs = []; let firstB64 = null, refB64 = null; const seed = 1 + Math.floor(Math.random()*999999);
       const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible, doing the action described below. Do NOT copy the composition of the reference: use a clearly different camera angle, framing, pose and background, as described below. New scene: ';
       const WIDE1 = 'Wide full-body shot, every subject completely visible and doing the action described below exactly as stated, even natural light. ';
-      const SHOTS = ['', 'New camera angle: medium side view from the left, a different part of the setting behind them. ', 'New camera angle: low angle looking up at them, different background and warmer light. ', 'New camera angle: wide shot from slightly behind, a different spot in the setting, soft golden light. '];
+      const SHOTS = ['', 'Same place and same background elements as the reference, camera moved to a medium side view. ', 'Same place and same background elements as the reference, camera lower, looking up at them. ', 'Same place and same background elements as the reference, wide shot from slightly behind. '];
       const REFP2 = 'Keep the same characters as in the reference image (same faces, fur, hair, clothes and colors, each its own species), but do NOT copy its camera angle, pose or background.';
       const paintScene = async (i, sd, preset) => {
         const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
@@ -1726,7 +1748,7 @@
         // 1) every required subject is present (when the planner gave a list)
         if(subjects.length){
           try{ const c = document.createElement('canvas'); c.width = 384; c.height = 512; c.getContext('2d').drawImage(imgs[i], 0, 0, 384, 512);
-            const who = subjects.length > 1 ? subjects.slice(0, -1) : subjects; const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects: who}); if(!r.ok) return r; }catch(e){}
+            const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects}); if(!r.ok) return r; }catch(e){}
         }
         // 2) pairwise: scene 2 vs scene 1, scene 3 vs scene 1 and scene 2, scene 4 vs scene 1 and scene 3 (needs no planner)
         if(i > 0){
