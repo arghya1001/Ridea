@@ -1759,7 +1759,7 @@
         const sj = scenes[i] && scenes[i].subjects && scenes[i].subjects.length ? scenes[i].subjects : subjects;
         if(sj.length){
           try{ const c = document.createElement('canvas'); c.width = 384; c.height = 512; c.getContext('2d').drawImage(imgs[i], 0, 0, 384, 512);
-            const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects: sj}); if(!r.ok) return r; }catch(e){}
+            const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects: sj, absent: scenes[i].absent || [], exact: scenes[i].absent !== undefined}); if(!r.ok){ if(r.unexpected && r.unexpected.length) r.reason = 'unexpected: ' + r.unexpected.join('; '); return r; } }catch(e){}
         }
         // 2) pairwise: scene 2 vs scene 1, scene 3 vs scene 1 and scene 2, scene 4 vs scene 1 and scene 3 (needs no planner)
         if(i > 0){
