@@ -1570,7 +1570,7 @@
     paint(); row.parentNode.insertBefore(b, row);
   })();
 
-  const FD = 3.2, FN = 4, FW = 540, FH = 720, SC = 1.5;   // SC = render scale: sharper canvas, same layout
+  let FN = 4; const FD = 3.2, FW = 540, FH = 720, SC = 1.5;   // SC = render scale: sharper canvas, same layout
   async function makeFilm(idea){
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgb(8,8,20);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
@@ -1631,10 +1631,11 @@
       // Stage 3: script -> scenes (the pictures come next)
       st('Planning the scenes from your story…');
       let planErr = '';
-      for(let tr = 0; tr < 2 && (!scenes || scenes.length < FN); tr++){   // the planner is what keeps characters identical, so try twice before giving up
+      for(let tr = 0; tr < 2 && (!scenes || scenes.length < 1); tr++){   // the planner is what keeps characters identical, so try twice before giving up
         try{ const r0 = await api('/scenes', {idea, story, script: script.slice(0, 2800)}); scenes = r0.scenes; sheet = r0.sheet || ''; subjects = r0.subjects || []; story = r0.story || story; }catch(e){ planErr = (e && e.message) || 'planner busy'; if(tr === 0) await new Promise(r => setTimeout(r, 2500)); }
       }
-      if(!scenes || scenes.length < FN){
+      if(!scenes || scenes.length < 1){
+        FN = 4;
         // planner unavailable: build the 4 scenes from the story's own sentences and repeat the story in every picture, so the characters stay the same
         showToast('Scene planner unavailable (' + planErr.slice(0, 80) + '). Using your story directly.');
         const txt = (story || script || idea).replace(/\s+/g, ' ').trim();
@@ -1645,7 +1646,7 @@
           return {caption: sn[Math.floor(k*per)].slice(0, 90), visual: (beat.slice(0, 200) + '. ' + sh + '. The same characters, same clothes and same place in every scene: ' + anchor).slice(0, 520)}; });
         sheet = 'The scene planner was busy, so each scene follows one part of your story. Describe your characters clearly in the story (age, hair, clothes) to keep them the same.';
       }
-      scenes = scenes.slice(0, FN);
+      scenes = scenes.slice(0, 24); FN = scenes.length;   // the planner decides how many scenes the story needs
       // ---- plan review: idea -> mini story -> scenes, all editable before any picture is painted ----
       await new Promise(resolve => {
         wake = resolve;
@@ -1667,7 +1668,7 @@
         rv.append(lab('Step 2 of 3 · Scenes to paint', 'margin-top:0'), body);
         const go = document.createElement('button'); go.className = 'generate-btn'; go.textContent = 'Paint these scenes'; go.style.cssText = 'padding:12px 20px;border-radius:12px;align-self:center;margin-top:6px';
         rv.appendChild(go); cv.style.display = 'none'; cv.after(rv);
-        st('Scenes planned from your script. Edit anything, then paint (step 4: pictures, step 5: video).');
+        st('Scenes planned from your story. Edit anything, then paint (step 3: pictures, then video).');
         go.onclick = () => { scenes.forEach((sc, i) => { sc.caption = caps[i].value.trim() || sc.caption; const nv = viss[i].value.trim(); if(nv && nv !== sc.visual){ sc.visual = nv; sc.edit = null; } }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
       });
       if(!alive) return;
@@ -1729,8 +1730,8 @@
       const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible, doing the action described below. Do NOT copy the composition of the reference: use a clearly different camera angle, framing, pose and background, as described below. New scene: ';
       const WIDE1 = 'Wide full-body shot, every subject completely visible and doing the action described below exactly as stated, even natural light. ';
       const SHOTS = ['', 'Medium shot from the characters\' left side in three-quarter view, camera 2 metres away, subjects fill the frame. ', 'Low-angle shot, camera near the ground looking up at the subjects, big sky or ceiling behind them. ', 'Over-the-shoulder shot from behind one character, looking toward the others, a different part of the same place in the background. '];
-      const CAMS = SHOTS;
-      const EDIT_PRE = 'Use the reference picture ONLY for how the characters and the place look (same faces, hair, fur, costumes, colors, art style). Paint a NEW picture with a completely different composition: ';
+      const CAMS = new Array(32).fill('');   // empty = follow the planner's camera; filled only when a scene copies the previous one
+      const EDIT_PRE = 'Use the reference picture ONLY for how the characters and the place look (same faces, hair, fur, costumes, colors, art style). Paint a NEW picture of the next moment of the story, with the camera, poses and objects exactly as described below: ';
       const REFP2 = 'Keep the same characters as in the reference image (same faces, fur, hair, clothes and colors, each its own species), but do NOT copy its camera angle, pose or background.';
       const toRef = im => { try{ const c = document.createElement('canvas'); c.width = 480; c.height = 640; c.getContext('2d').drawImage(im, 0, 0, 480, 640); return c.toDataURL('image/jpeg', .88).split(',')[1]; }catch(e){ return null; } };
       // a character that first appears after scene 1 (for example a rabbit) is not in the scene-1 reference, so also show the latest picture that contains it
@@ -1751,7 +1752,7 @@
       const bad = new Set();
       const sideBySide = (a, b) => { const c = document.createElement('canvas'); c.width = 768; c.height = 512; const g = c.getContext('2d'); g.drawImage(a, 0, 0, 384, 512); g.drawImage(b, 384, 0, 384, 512); return c.toDataURL('image/jpeg', .8).split(',')[1]; };
       const fp = im => { const c = document.createElement('canvas'); c.width = 24; c.height = 32; const g = c.getContext('2d'); g.drawImage(im, 0, 0, 24, 32); const d = g.getImageData(0, 0, 24, 32).data, o = []; for(let p = 0; p < d.length; p += 4) o.push(d[p] * .3 + d[p+1] * .59 + d[p+2] * .11); return o; };
-      const tooSimilar = i => { try{ const a = fp(imgs[i]); for(let k = 0; k < i; k++){ const b = fp(imgs[k]); let s = 0; for(let q = 0; q < a.length; q++) s += Math.abs(a[q] - b[q]); if(s / a.length < 22) return k; } }catch(e){} return -1; };
+      const tooSimilar = i => { try{ const a = fp(imgs[i]); for(let k = Math.max(0, i - 1); k < i; k++){ const b = fp(imgs[k]); let s = 0; for(let q = 0; q < a.length; q++) s += Math.abs(a[q] - b[q]); if(s / a.length < 14) return k; } }catch(e){} return -1; };
       const checkImg = async i => {
         const dup = i > 0 ? tooSimilar(i) : -1; if(dup >= 0) return {ok: false, missing: [], reason: 'almost the same picture as scene ' + (dup + 1)};
         // 1) every required subject is present (when the planner gave a list)
@@ -1773,7 +1774,7 @@
       const paintChecked = async (i, sd, preset) => {
         let r = {ok: true, missing: []};
         for(let t = 0; t < 3 && alive; t++){
-          if(t && r.reason && /almost the same/.test(r.reason)) CAMS[i] = 'COMPLETELY DIFFERENT VIEWPOINT from the reference, camera clearly moved, characters in new positions and poses. ' + SHOTS[i]; await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd, t ? undefined : preset);
+          if(t && r.reason && /almost the same/.test(r.reason)) CAMS[i] = 'COMPLETELY DIFFERENT VIEWPOINT from the reference, camera clearly moved, characters in new positions and poses. ' + SHOTS[1 + (i - 1) % 3]; await paintScene(i, t ? 1 + Math.floor(Math.random()*999999) : sd, t ? undefined : preset);
           st(`Checking scene ${i + 1} for consistency…`);
           r = await checkImg(i);
           if(r.ok){ bad.delete(i); return; }
