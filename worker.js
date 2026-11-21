@@ -179,6 +179,20 @@ export default {
         });
         return send({ premises });
       }
+      if (path === "/director") {       // voice/chat "assistant director": talks an idea through and keeps a running film concept
+        const msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-14).map(m => ({ role: m && m.role === "assistant" ? "assistant" : "user", content: String((m && m.content) || "").slice(0, 600) })).filter(m => m.content);
+        if (!msgs.length || msgs[msgs.length - 1].role !== "user") return send({ error: "Say or type your idea first" }, 400);
+        const sys = `You are Ridea, a warm, sharp film director and creative partner. You help the user shape a rough idea into a short vertical story film (about 13 seconds, 4 scenes). The user talks to you by voice, so write the way you would speak: 1 to 3 short sentences, no lists, no markdown, no emojis. Reply in the same language the user used (English, Hindi, or Hinglish in Roman letters if they wrote that way). Each turn: react briefly, add ONE concrete suggestion or offer two options (tone, twist, character look, ending), and ask ONE short question. Keep exactly what the user asked for; never replace their idea. When the user says go ahead, ready or start, or after about 3 exchanges, say the idea is ready and invite them to tap Make the film. Reply with ONLY one JSON object: {"reply":"what you say","ready":false,"concept":"..."}. "concept" = the running film idea in ENGLISH, one clear paragraph of 30-70 words naming the main characters (age, look, costume), the one place, and a beginning, middle and end of the key action, including every choice the user agreed to. "ready" = true once the concept is complete.`;
+        const run = async model => {
+          const out = await chat(env, model, { max_tokens: 500, messages: [{ role: "system", content: sys }, ...msgs] });
+          const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
+          const obj = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+          const reply = String(obj.reply || "").trim().slice(0, 600);
+          if (!reply) throw new Error("bad reply");
+          return { reply, ready: !!obj.ready, concept: String(obj.concept || "").trim().slice(0, 800) };
+        };
+        return send(await chain(env, run));
+      }
       if (path === "/story") {          // concept -> mini story
         const idea = String(body.idea || "").slice(0, 300);
         if (!idea) return send({ error: "Describe your idea first" }, 400);

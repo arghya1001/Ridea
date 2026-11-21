@@ -1570,6 +1570,69 @@
     paint(); row.parentNode.insertBefore(b, row);
   })();
 
+  // ---- VOICE DIRECTOR: talk an idea through with Ridea, then hand the concept to the film pipeline ----
+  (function(){
+    const row = document.querySelector('.quick-row'); if(!row) return;
+    const open = document.createElement('button'); open.type = 'button'; open.textContent = '🎙 Talk to the Director';
+    open.style.cssText = 'margin:0 8px 10px 0;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid #a99bff;background:rgba(169,155,255,.14);color:var(--paper);font:500 13px Inter,sans-serif;cursor:pointer';
+    row.parentNode.insertBefore(open, row);
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    open.onclick = () => {
+      const msgs = [], S = {listening: false, speak: true, hands: !!SR, busy: false, concept: '', rec: null, finalText: ''};
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgb(8,8,20);display:flex;flex-direction:column;color:#fff;font:400 14px Inter,sans-serif';
+      ov.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.12)"><b style="font-size:15px">🎬 Ridea Director</b><span style="display:flex;gap:8px;align-items:center"><select id="dl" style="background:#1b1b33;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px"><option value="en-IN">English</option><option value="hi-IN">हिन्दी</option></select><button id="ds" style="background:none;border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:6px 8px;cursor:pointer">🔊</button><button id="dx" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer;padding:0 4px">×</button></span></div>' +
+        '<div id="dlog" style="flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px"></div>' +
+        '<div id="dc" style="display:none;margin:0 14px 8px;padding:10px;border-radius:12px;background:rgba(169,155,255,.14);border:1px solid rgba(169,155,255,.4)"><div style="font-weight:600;font-size:12px;color:#cfc6ff;margin-bottom:4px">Idea so far</div><div id="dct" style="font-size:13px;line-height:1.4"></div><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button id="du" class="generate-btn" style="padding:10px 14px;border-radius:10px">Use this idea</button><button id="dm" class="generate-btn" style="padding:10px 14px;border-radius:10px">Make the film →</button></div></div>' +
+        '<div style="display:flex;gap:8px;align-items:center;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.12)"><button id="dmic" style="flex:none;width:52px;height:52px;border-radius:26px;border:0;background:linear-gradient(135deg,#8b7cff,#e58bd9);font-size:22px;cursor:pointer">🎙</button><input id="dt" type="text" placeholder="Speak, or type your idea…" style="flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;padding:0 12px;font:400 14px Inter,sans-serif"><button id="dsend" style="flex:none;height:44px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:none;color:#fff;cursor:pointer">Send</button></div>';
+      document.body.appendChild(ov);
+      const $ = id => ov.querySelector('#' + id), log = $('dlog'), inp = $('dt'), mic = $('dmic'), langSel = $('dl');
+      const bubble = (who, txt) => { const b = document.createElement('div'); b.textContent = txt; b.style.cssText = 'max-width:86%;padding:9px 12px;border-radius:14px;line-height:1.45;white-space:pre-wrap;' + (who === 'me' ? 'align-self:flex-end;background:rgba(139,124,255,.35)' : 'align-self:flex-start;background:rgba(255,255,255,.09)'); log.appendChild(b); log.scrollTop = log.scrollHeight; return b; };
+      const stopRec = () => { try{ if(S.rec) S.rec.stop(); }catch(e){} };
+      const setMic = on => { S.listening = on; mic.textContent = on ? '⏹' : '🎙'; mic.style.boxShadow = on ? '0 0 0 6px rgba(229,139,217,.35)' : 'none'; };
+      const say = (txt, done0) => {
+        let fired = false; const done = () => { if(fired) return; fired = true; if(done0) done0(); };
+        if(!S.speak || !window.speechSynthesis){ done(); return; }
+        setTimeout(done, Math.min(25000, 3500 + txt.length * 85));   // some phones never fire the end event
+        try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.lang = langSel.value; u.rate = 1.02;
+          const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.replace('_', '-').toLowerCase().startsWith(langSel.value.slice(0, 2))); if(v) u.voice = v;
+          u.onend = u.onerror = () => { if(done) done(); }; speechSynthesis.speak(u); }catch(e){ if(done) done(); }
+      };
+      const listen = () => {
+        if(!SR || S.busy) return;
+        try{ speechSynthesis.cancel(); }catch(e){}
+        const r = new SR(); S.rec = r; S.finalText = ''; r.lang = langSel.value; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+        r.onstart = () => setMic(true);
+        r.onresult = e => { let fin = '', tmp = ''; for(let i = e.resultIndex; i < e.results.length; i++){ const t = e.results[i][0].transcript; if(e.results[i].isFinal) fin += t; else tmp += t; } if(fin) S.finalText += fin; inp.value = (S.finalText + tmp).trim(); };
+        r.onerror = e => { setMic(false); if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){ showToast('Microphone is blocked. Allow it in the browser, or type instead.'); S.hands = false; } };
+        r.onend = () => { setMic(false); const t = (S.finalText || inp.value).trim(); if(t) send(t); };
+        try{ r.start(); }catch(e){ setMic(false); }
+      };
+      const send = async text => {
+        text = String(text || inp.value).trim(); if(!text || S.busy) return;
+        inp.value = ''; bubble('me', text); msgs.push({role: 'user', content: text}); S.busy = true;
+        const wait = bubble('bot', '…');
+        try{
+          const j = await api('/director', {messages: msgs});
+          wait.textContent = j.reply; msgs.push({role: 'assistant', content: j.reply});
+          if(j.concept){ S.concept = j.concept; $('dct').textContent = j.concept; $('dc').style.display = 'block'; }
+          S.busy = false; log.scrollTop = log.scrollHeight;
+          say(j.reply, () => { if(S.hands && SR && document.body.contains(ov)) listen(); });
+        }catch(e){ wait.textContent = 'I could not reach the director (' + (e.message || 'error') + '). Try again.'; msgs.pop(); S.busy = false; }
+      };
+      const useIdea = go => { if(!S.concept) return; quickInput.value = S.concept; if(activeType !== 'video'){ const t = document.querySelector('.type-tab[data-type="video"]'); if(t) t.click(); } close(); if(go) setTimeout(() => generateBtn.click(), 150); else showToast('Idea added. Tap Generate when you are ready.'); };
+      const close = () => { stopRec(); try{ speechSynthesis.cancel(); }catch(e){} ov.remove(); };
+      mic.onclick = () => { if(S.listening){ stopRec(); } else listen(); };
+      $('dsend').onclick = () => send();
+      inp.onkeydown = e => { if(e.key === 'Enter') send(); };
+      $('dx').onclick = close; $('du').onclick = () => useIdea(false); $('dm').onclick = () => useIdea(true);
+      $('ds').onclick = () => { S.speak = !S.speak; $('ds').textContent = S.speak ? '🔊' : '🔇'; if(!S.speak){ try{ speechSynthesis.cancel(); }catch(e){} } };
+      const hello = 'Hi, I am your director. Tell me your film idea, by voice or text, and we will shape it together.';
+      bubble('bot', hello); if(!SR) bubble('bot', 'Voice input is not supported in this browser. Chrome on Android works best. You can still type to me.');
+      say(hello, () => { if(S.hands && SR && document.body.contains(ov)) listen(); });
+    };
+  })();
+
   let FN = 4; const FD = 3.2, FW = 540, FH = 720, SC = 1.5;   // SC = render scale: sharper canvas, same layout
   async function makeFilm(idea){
     const ov = document.createElement('div');
