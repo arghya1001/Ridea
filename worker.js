@@ -80,6 +80,22 @@ async function chat(env, p, { max_tokens, messages }) {
   const j = await post(cfg[0], { Authorization: "Bearer " + cfg[1] }, { model: cfg[2], messages, max_tokens });
   return { response: (j.choices || [{}])[0].message?.content || "" };
 }
+// ---- Gemini helpers: picture checking, speech-to-text and text-to-speech (need the GEMINI_API_KEY secret) ----
+async function geminiCall(env, parts, o = {}) {
+  if (!env.GEMINI_API_KEY) throw new Error("no gemini key");
+  const model = o.model || env.GEMINI_VISION_MODEL || env.GEMINI_MODEL || "gemini-flash-lite-latest";
+  const gen = o.gen && o.gen.responseModalities ? o.gen : Object.assign({ temperature: 0.2, maxOutputTokens: o.max || 400 }, o.json ? { responseMimeType: "application/json" } : {}, o.gen || {});
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
+    body: JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: gen }), signal: AbortSignal.timeout(25000),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error((j.error && j.error.message) || "gemini " + r.status); e.status = r.status; throw e; }
+  return j;
+}
+const geminiText = j => (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || "").join("");
+const geminiJson = j => { const t = geminiText(j); return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)); };
+
 async function chain(env, fn) {
   const order = String(env.LLM_ORDER || "gemini,cerebras,openrouter,cf70,cf8").split(",").map(s => s.trim()).filter(Boolean);
   let last = null, limited = false;
@@ -182,7 +198,8 @@ export default {
       if (path === "/director") {       // voice/chat "assistant director": talks an idea through and keeps a running film concept
         const msgs = (Array.isArray(body.messages) ? body.messages : []).slice(-14).map(m => ({ role: m && m.role === "assistant" ? "assistant" : "user", content: String((m && m.content) || "").slice(0, 600) })).filter(m => m.content);
         if (!msgs.length || msgs[msgs.length - 1].role !== "user") return send({ error: "Say or type your idea first" }, 400);
-        const sys = `You are Ridea, a warm, sharp film director and creative partner. You help the user shape a rough idea into a short vertical story film (about 13 seconds, 4 scenes). The user talks to you by voice, so write the way you would speak: 1 to 3 short sentences, no lists, no markdown, no emojis. Reply in the same language the user used (English, Hindi, or Hinglish in Roman letters if they wrote that way). Each turn: react briefly, add ONE concrete suggestion or offer two options (tone, twist, character look, ending), and ask ONE short question. Keep exactly what the user asked for; never replace their idea. When the user says go ahead, ready or start, or after about 3 exchanges, say the idea is ready and invite them to tap Make the film. Reply with ONLY one JSON object: {"reply":"what you say","ready":false,"concept":"..."}. "concept" = the running film idea in ENGLISH, one clear paragraph of 30-70 words naming the main characters (age, look, costume), the one place, and a beginning, middle and end of the key action, including every choice the user agreed to. "ready" = true once the concept is complete.`;
+        const langName = { "en-IN": "English", "hi-IN": "Hindi", "bn-IN": "Bengali" }[String(body.lang || "")] || "";
+        const sys = `You are Ridea, a warm, sharp film director and creative partner. You help the user shape a rough idea into a short vertical story film (about 13 seconds, 4 scenes). The user talks to you by voice, so write the way you would speak: 1 to 3 short sentences, no lists, no markdown, no emojis. Reply in the same language the user used (English, Hindi, Bengali, or Hinglish in Roman letters if they wrote that way); write Hindi in Devanagari and Bengali in Bengali script.${langName ? " The user picked " + langName + " for this conversation, so reply in " + langName + " unless they clearly switch language." : ""} Each turn: react briefly, add ONE concrete suggestion or offer two options (tone, twist, character look, ending), and ask ONE short question. Keep exactly what the user asked for; never replace their idea. When the user says go ahead, ready or start, or after about 3 exchanges, say the idea is ready and invite them to tap Make the film. Reply with ONLY one JSON object: {"reply":"what you say","ready":false,"concept":"..."}. "concept" = the running film idea in ENGLISH, one clear paragraph of 30-70 words naming the main characters (age, look, costume), the one place, and a beginning, middle and end of the key action, including every choice the user agreed to. "ready" = true once the concept is complete.`;
         const run = async model => {
           const out = await chat(env, model, { max_tokens: 500, messages: [{ role: "system", content: sys }, ...msgs] });
           const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
@@ -309,10 +326,41 @@ export default {
         };
         return send(await chain(env, run));
       }
+      if (path === "/transcribe") {     // speech to text with Gemini (English, Hindi, Bengali and mixes)
+        const audio = String(body.audio || ""), mime = String(body.mime || "audio/webm").slice(0, 40);
+        if (!audio) return send({ error: "No audio" }, 400);
+        if (audio.length > 2000000) return send({ error: "Recording too long" }, 413);
+        if (!env.GEMINI_API_KEY) return send({ error: "Voice transcription needs the GEMINI_API_KEY secret" }, 400);
+        try {
+          const j = await geminiCall(env, [{ text: "Transcribe this speech exactly as spoken. The speaker may use English, Hindi or Bengali, or a mix. Write Hindi in Devanagari script and Bengali in Bengali script. Reply with ONLY the transcript and nothing else. If there is no speech, reply with an empty string." }, { inline_data: { mime_type: mime, data: audio } }], { max: 400 });
+          return send({ text: geminiText(j).trim().slice(0, 800) });
+        } catch (e) { return send({ error: /limit|quota|429/i.test(String(e)) ? "Free limit reached: Gemini is busy right now" : "Could not transcribe (" + String(e.message || e).slice(0, 80) + ")" }, e.status === 429 ? 429 : 502); }
+      }
+      if (path === "/speak") {          // text to speech with Gemini, used when the phone has no voice for the language
+        const text = String(body.text || "").slice(0, 600);
+        if (!text) return send({ error: "No text" }, 400);
+        if (!env.GEMINI_API_KEY) return send({ error: "Spoken replies need the GEMINI_API_KEY secret" }, 400);
+        try {
+          const j = await geminiCall(env, [{ text }], { model: env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts", gen: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: env.GEMINI_VOICE || "Kore" } } } }, max: 2000 });
+          const part = (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.find(p => p.inlineData || p.inline_data);
+          const d = part && (part.inlineData || part.inline_data);
+          if (!d || !d.data) throw new Error("no audio returned");
+          const m = /rate=(\d+)/.exec(d.mimeType || d.mime_type || "");
+          return send({ pcm: d.data, rate: m ? parseInt(m[1]) : 24000 });
+        } catch (e) { return send({ error: "Could not speak (" + String(e.message || e).slice(0, 80) + ")" }, e.status === 429 ? 429 : 502); }
+      }
       if (path === "/compare") {       // pairwise consistency: one side-by-side picture (left = reference scene, right = new scene)
         const image = String(body.image || "");
         if (!image) return send({ ok: true });
         if (image.length > 900000) return send({ error: "Image too large" }, 413);
+        if (env.GEMINI_API_KEY) {
+          try {
+            const j = await geminiCall(env, [{ text: 'This image shows two pictures side by side from the same film. The left one is the reference scene, the right one is a new scene. Judge ONLY the characters, animals and objects that appear in BOTH pictures: are they the same (same species, face, hair or fur color, body shape, clothing colors, same props)? Different poses, camera angles, backgrounds and light are fine. Reply ONLY {"same":true or false,"differences":["short description of each real difference"]}' }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 250 });
+            const r = geminiJson(j);
+            const diffs = (Array.isArray(r.differences) ? r.differences : []).map(s => String(s).slice(0, 70)).slice(0, 3);
+            return send({ ok: r.same !== false, failed: diffs, by: "gemini" });
+          } catch (e) { /* fall through */ }
+        }
         const bin = atob(image), bytes = new Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const qs = [
@@ -337,6 +385,14 @@ export default {
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         if (body.exact) {   // describe first, then a text model compares the description with the checklist
           const absent = (Array.isArray(body.absent) ? body.absent : []).slice(0, 5).map(s => String(s).slice(0, 60)).filter(Boolean);
+          if (env.GEMINI_API_KEY) {   // Gemini looks at the picture and compares it with the checklist in one step
+            try {
+              const j = await geminiCall(env, [{ text: `You check one picture from a film storyboard against a checklist. Look at it carefully.\nExpected to be visible: ${subjects.join("; ")}\nMust NOT be visible: ${absent.join("; ") || "nothing in particular"}\nNo other person or animal may appear besides the expected ones, and no expected character may appear twice.\nReply ONLY {"missing":["expected items that are not in the picture"],"unexpected":["people, animals or objects that are not expected, appear twice, or are in the must-not-be-visible list"]}` }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 300 });
+              const r = geminiJson(j);
+              const miss = (Array.isArray(r.missing) ? r.missing : []).map(s => String(s).slice(0, 80)), extra = (Array.isArray(r.unexpected) ? r.unexpected : []).map(s => String(s).slice(0, 80));
+              return send({ ok: !miss.length && !extra.length, missing: miss, unexpected: extra, by: "gemini" });
+            } catch (e) { /* fall through to the Cloudflare vision path */ }
+          }
           try {
             const o = await env.AI.run(VISION_MODEL, { image: bytes, max_tokens: 230, prompt: "Describe this picture in detail. List every person and every animal one by one: say what each is, what it wears on its head and body, what it holds in its hands, and where it stands. Also name any other main objects." });
             const desc = String(o.description || o.response || "").slice(0, 1500);
