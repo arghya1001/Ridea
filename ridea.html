@@ -1664,7 +1664,7 @@
           if(sheet){ const n = document.createElement('div'); n.textContent = sheet; n.style.cssText = 'color:#cfc6ff;font:400 12px Inter,sans-serif;line-height:1.4'; body.append(lab('Characters & setting'), n); }
           scenes.forEach((sc, i) => {
             const c1 = document.createElement('textarea'); c1.rows = 1; c1.value = sc.caption; c1.style.cssText = tax;
-            const v1 = document.createElement('textarea'); v1.rows = 4; v1.value = sc.visual; v1.style.cssText = tax;
+            const v1 = document.createElement('textarea'); v1.rows = 9; v1.value = sc.visual; v1.style.cssText = tax;
             caps.push(c1); viss.push(v1); body.append(lab('Scene ' + (i + 1)), c1, v1);
           });
         };
@@ -1673,7 +1673,7 @@
         const go = document.createElement('button'); go.className = 'generate-btn'; go.textContent = 'Paint these scenes'; go.style.cssText = 'padding:12px 20px;border-radius:12px;align-self:center;margin-top:6px';
         rv.appendChild(go); cv.style.display = 'none'; cv.after(rv);
         st('Scenes planned from your script. Edit anything, then paint (step 4: pictures, step 5: video).');
-        go.onclick = () => { scenes.forEach((sc, i) => { sc.caption = caps[i].value.trim() || sc.caption; sc.visual = viss[i].value.trim() || sc.visual; }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
+        go.onclick = () => { scenes.forEach((sc, i) => { sc.caption = caps[i].value.trim() || sc.caption; const nv = viss[i].value.trim(); if(nv && nv !== sc.visual){ sc.visual = nv; sc.edit = null; } }); rv.remove(); cv.style.display = ''; wake = null; resolve(); };
       });
       if(!alive) return;
       // AI motion (optional): the Worker routes to free GPU providers; any failure just keeps the free storybook look
@@ -1734,9 +1734,10 @@
       const REFP = 'Use the reference image only for how each subject looks. Keep every subject exactly as in the reference: the same face, skin or fur, hair or mane, clothing, colors and proportions, and keep each one its own species (a human stays human, an animal stays an animal, never blend their features). Every subject from the reference must appear in this new picture, fully visible, doing the action described below. Do NOT copy the composition of the reference: use a clearly different camera angle, framing, pose and background, as described below. New scene: ';
       const WIDE1 = 'Wide full-body shot, every subject completely visible and doing the action described below exactly as stated, even natural light. ';
       const SHOTS = ['', 'Same place and same background elements as the reference, camera moved to a medium side view. ', 'Same place and same background elements as the reference, camera lower, looking up at them. ', 'Same place and same background elements as the reference, wide shot from slightly behind. '];
+      const EDIT_PRE = 'Edit the reference picture: keep the same people, animals, costumes, place and art style, but change the pose, the camera and what is happening, as described. ';
       const REFP2 = 'Keep the same characters as in the reference image (same faces, fur, hair, clothes and colors, each its own species), but do NOT copy its camera angle, pose or background.';
       const paintScene = async (i, sd, preset) => {
-        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
+        const j = preset ? {image: preset} : await api('/image', {prompt: i > 0 && refB64 && scenes[i].edit ? EDIT_PRE + styled(scenes[i].edit) : i > 0 && refB64 ? SHOTS[i] + styled(scenes[i].visual) + ' ' + REFP2 : (i === 0 ? WIDE1 : '') + styled(scenes[i].visual), w: 768, h: 1024, seed: sd, ref: i > 0 ? refB64 || undefined : undefined});
         if(i === 0) firstB64 = j.image;
         imgs[i] = await new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = 'data:image/png;base64,' + j.image; });
         if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 360; c.height = 480; c.getContext('2d').drawImage(imgs[0], 0, 0, 360, 480); refB64 = c.toDataURL('image/jpeg', .9).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
@@ -1746,9 +1747,10 @@
       const sideBySide = (a, b) => { const c = document.createElement('canvas'); c.width = 768; c.height = 512; const g = c.getContext('2d'); g.drawImage(a, 0, 0, 384, 512); g.drawImage(b, 384, 0, 384, 512); return c.toDataURL('image/jpeg', .8).split(',')[1]; };
       const checkImg = async i => {
         // 1) every required subject is present (when the planner gave a list)
-        if(subjects.length){
+        const sj = scenes[i] && scenes[i].subjects && scenes[i].subjects.length ? scenes[i].subjects : subjects;
+        if(sj.length){
           try{ const c = document.createElement('canvas'); c.width = 384; c.height = 512; c.getContext('2d').drawImage(imgs[i], 0, 0, 384, 512);
-            const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects}); if(!r.ok) return r; }catch(e){}
+            const r = await api('/check', {image: c.toDataURL('image/jpeg', .85).split(',')[1], subjects: sj}); if(!r.ok) return r; }catch(e){}
         }
         // 2) pairwise: scene 2 vs scene 1, scene 3 vs scene 1 and scene 2, scene 4 vs scene 1 and scene 3 (needs no planner)
         if(i > 0){

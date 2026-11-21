@@ -131,7 +131,7 @@ export default {
 
     try {
       if (path === "/image") {
-        const prompt = String(body.prompt || "").slice(0, 1500);
+        const prompt = String(body.prompt || "").slice(0, 2600);
         if (!prompt) return send({ error: "Describe the image first" }, 400);
         const W = Math.min(1024, Math.max(256, (parseInt(body.w) || 1024) & ~15)), H = Math.min(1024, Math.max(256, (parseInt(body.h) || 1024) & ~15));
         const ref = String(body.ref || "");
@@ -232,27 +232,50 @@ export default {
         if (!idea) return send({ error: "Describe your film idea first" }, 400);
         // The model only fills in a small "story bible"; the CODE then builds every image prompt from it,
         // so the same characters, costume, props and place are repeated word for word in all 4 scenes.
-        const sys = `You are a film director planning a 4-scene mini film (13 seconds). The user gives a short idea (and maybe an approved story and script). Reply with ONLY one JSON object:
-{"story":"...","plan":"...","characters":[{"name":"...","short":"...","look":"..."}],"setting":"...","beats":[{"caption":"...","action":"...","must_show":["..."],"motion":"..."}]}
+        const sys = `You are a film director planning a 4-scene mini film (13 seconds). The user gives a short idea (and maybe an approved story and script). An image generator will paint each scene from your words alone and knows NOTHING about the story, so every scene needs a complete shot sheet that says who is visible, exactly where each one stands, what each hand holds, and what is NOT in the picture. Reply with ONLY one JSON object:
+{"story":"...","plan":"...","characters":[{"name":"...","short":"...","look":"..."}],"setting":"...","beats":[{"caption":"...","camera":"...","backdrop":"...","positions":[{"who":"...","where":"...","facing":"...","pose":"...","hands":"...","face":"..."}],"props":"...","absent":["..."],"light":"...","must_show":["..."],"motion":"..."}]}
 "story": 4 short sentences with beginning, middle and end, naming the characters and the one fixed place. If an approved story or script is given, keep its characters, place and events exactly and make the 4 beats follow it in order.
 "plan": one short sentence saying what you adapted to make the idea drawable, or an empty string.
-"characters": 1 to 3 main characters (animals and important objects count too). "short" = under 15 words a person could use to check a picture (for example "a real adult lion with a golden mane"). "look" = 25-35 words of exact visual detail: species in plain words and what it is NOT (for example "human baby, no fur, no tail"), age, hair or fur, and the full costume and props with exact counts and colors. If the idea names a role (magician, chef, knight, astronaut...), the look MUST include that role's recognisable costume and prop (a magician: tall black top hat, black cape with red lining, white gloves, small wand). Give each character a different dominant color. Adapt physically awkward ideas (baby on a bike becomes a toddler in a helmet on a tricycle).
+"characters": 1 to 3 main characters (animals and important objects count too). Short unique names. "short" = under 15 words a person could use to check a picture. "look" = 25-35 words of exact visual detail: species in plain words and what it is NOT (for example "human baby, no fur, no tail"), age, hair or fur, and the full costume and props with exact counts and colors. If the idea names a role (magician, chef, knight, astronaut...), the look MUST include that role's recognisable costume and prop (a magician: tall black top hat, black cape with red lining, white gloves, small wand). Give each character a different dominant color. Adapt physically awkward ideas (a baby on a bike becomes a toddler in a helmet on a tricycle).
 "setting": one fixed place with 4 fixed visible elements and a time of day, 20-30 words, matching the idea (a circus magician: a circus ring with a red and white striped tent, a sawdust floor, a bright spotlight and a red curtain). The place never changes between scenes.
-"beats": exactly 4, following the story in order. "caption" = one warm sentence of 6-12 words that describes ONLY what is visible in that picture. "action" = 25-40 words: the exact body poses and where every character and object is, with ALL characters visible together, doing ONE simple natural action. Beat 1 must show the main object of the idea big and clear (for a rabbit from a hat: the magician holds the empty top hat open toward the camera at chest height). The object the story is about must stay visible in every beat where it matters (for the rabbit: wand raised above the open hat, then the rabbit's ears and head rising out of the hat opening, with the hat in frame). "must_show" = 2-4 short things that MUST be visible in that picture. "motion" = 30-45 words of ONLY gentle movement for a small image-to-video model: a slow camera push-in or drift, soft light changes, hair, fur, cloth and leaves swaying, blinking, breathing, a small smile. NEVER walking, running, jumping, climbing or anything entering or leaving the frame.`;
+"beats": exactly 4, following the story in order. For each beat:
+"caption" = one warm sentence of 6-12 words describing ONLY what is visible in that picture.
+"camera" = shot size, angle and height, for example "wide full-body shot, eye level, camera 4 metres away" (beat 1 must be wide or medium full-body so every character is fully visible; beats 2-4 must use a clearly different camera from beat 1, for example low angle, side view, closer medium shot).
+"backdrop" = which setting elements are visible behind the characters and where in the frame (for example "striped tent wall fills the background, red curtain on the right, spotlight cone from the top left").
+"positions" = one entry for EVERY character visible in this picture, and no one else. "who" = the character's name. "where" = exact place in the frame and on the floor, using left, center, right, near, far and what they are next to (for example "center of the frame, standing on the sawdust one step in front of the red curtain"). "facing" = toward the camera, to the left, to the right, or at another character. "pose" = exact body pose. "hands" = exactly what each hand holds or does. "face" = the expression.
+"props" = the exact position and state of the key objects, for example "the black top hat is held open at chest height with the opening facing the camera, completely empty". The object the story is about must stay visible in every beat where it matters (for a rabbit from a hat: beat 1 the empty open hat, beat 2 the wand raised above the open hat, beat 3 the rabbit's ears and head rising out of the hat's opening with the hat in frame, beat 4 the rabbit out in the open).
+"absent" = things or characters that must NOT appear in this picture. A character who has not appeared yet in the story must be listed here and must not be in positions (the rabbit is absent in beats 1 and 2).
+"light" = a few words (for example "warm spotlight from the top left, soft shadows").
+"must_show" = 2-4 short things that MUST be visible.
+"motion" = 30-45 words of ONLY gentle movement for a small image-to-video model: a slow camera push-in or drift, soft light changes, hair, fur, cloth and leaves swaying, blinking, breathing, a small smile. NEVER walking, running, jumping, climbing or anything entering or leaving the frame.`;
         const story = String(body.story || "").slice(0, 2500), script = String(body.script || "").slice(0, 3000);
         const run = async model => {
-          const out = await chat(env, model, { max_tokens: 2400, messages: [{ role: "system", content: sys }, { role: "user", content: `Idea: ${idea}` + (story ? `\nApproved story: ${story}` : "") + (script ? `\nApproved script:\n${script}` : "") }] });
+          const out = await chat(env, model, { max_tokens: 3800, messages: [{ role: "system", content: sys }, { role: "user", content: `Idea: ${idea}` + (story ? `\nApproved story: ${story}` : "") + (script ? `\nApproved script:\n${script}` : "") }] });
           const raw = typeof out.response === "string" ? out.response : JSON.stringify(out.response);
           const obj = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
           const chars = (Array.isArray(obj.characters) ? obj.characters : []).slice(0, 3).filter(c => c && c.look);
           const setting = String(obj.setting || "").slice(0, 240);
-          const beats = (Array.isArray(obj.beats) ? obj.beats : obj.scenes || []).slice(0, 4).filter(x => x && x.caption && x.action);
+          const beats = (Array.isArray(obj.beats) ? obj.beats : obj.scenes || []).slice(0, 4).filter(x => x && x.caption);
           if (!chars.length || !setting || beats.length < 4) throw new Error("bad plan");
-          const charTxt = chars.map(c => (c.name ? String(c.name).slice(0, 20) + ": " : "") + String(c.look).slice(0, 210)).join(" ");
+          const findChar = who => { const q = String(who || "").toLowerCase().trim(); return chars.find(c => c.name && (String(c.name).toLowerCase() === q || q.includes(String(c.name).toLowerCase()) || String(c.name).toLowerCase().includes(q))); };
+          const looks = (c, n) => (c.name ? String(c.name).slice(0, 20) + ": " : "") + String(c.look).slice(0, n);
+          const charTxt = chars.map(c => looks(c, 210)).join(" ");
+          const t = (x, n) => String(x || "").trim().slice(0, n);
           const scenes = beats.map(b => {
-            const must = (Array.isArray(b.must_show) ? b.must_show : []).slice(0, 4).map(s => String(s).slice(0, 50)).join(", ");
-            const visual = `${charTxt} Setting: ${setting} Action: ${String(b.action).slice(0, 280)}${must ? " Must be clearly visible: " + must + "." : ""} Every character fully visible together. No text in the image.`.slice(0, 1000);
-            return { caption: String(b.caption).slice(0, 90), visual, motion: String(b.motion || "").slice(0, 400) };
+            const posList = (Array.isArray(b.positions) ? b.positions : []).filter(p => p && p.who).slice(0, 3);
+            if (!posList.length) throw new Error("bad plan");
+            const here = posList.map(p => findChar(p.who)).filter(Boolean);
+            const detail = n => posList.map(p => { const c = findChar(p.who); return `${c ? looks(c, n) : t(p.who, 30)}. Position: ${t(p.where, 110)}, facing ${t(p.facing, 30)}. Pose: ${t(p.pose, 140)}. Hands: ${t(p.hands, 140)}. Face: ${t(p.face, 30)}.`; }).join(" ");
+            const absent = (Array.isArray(b.absent) ? b.absent : []).slice(0, 4).map(s => t(s, 40)).filter(Boolean).join(", ");
+            const must = (Array.isArray(b.must_show) ? b.must_show : []).slice(0, 4).map(s => t(s, 50)).filter(Boolean).join(", ");
+            const common = `Key objects: ${t(b.props, 160)}.${must ? " Must be clearly visible: " + must + "." : ""} Light: ${t(b.light, 60)}.${absent ? " NOT in the picture: " + absent + "." : ""}`;
+            return {
+              caption: t(b.caption, 90),
+              visual: `Camera: ${t(b.camera, 90)}. Setting: ${setting.replace(/[.\s]+$/, "")}. Visible behind: ${t(b.backdrop, 140)}. ${detail(170)} ${common} Every character listed is fully visible. No text in the image.`.slice(0, 2000),
+              edit: `Camera: ${t(b.camera, 90)}. Visible behind: ${t(b.backdrop, 140)}. ${detail(90)} ${common}`.slice(0, 1700),   // used when a reference picture exists: written as an edit
+              subjects: (here.length ? here : chars).map(c => String(c.short || c.look).slice(0, 120)),
+              motion: t(b.motion, 400),
+            };
           });
           const plan = String(obj.plan || "").slice(0, 160);
           const sheet = ((plan ? "Plan: " + plan + " " : "") + charTxt + " Setting: " + setting).slice(0, 900);
