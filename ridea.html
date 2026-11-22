@@ -1655,7 +1655,7 @@
           if(j.concept){ S.concept = j.concept; $('dct').textContent = j.concept; $('dc').style.display = 'block'; }
           S.busy = false; log.scrollTop = log.scrollHeight;
           say(j.reply, () => { if(S.hands && SR && document.body.contains(ov)) listen(false); });
-        }catch(e){ wait.textContent = /limit|busy|quota/i.test(e.message || '') ? 'The free AI limit for today is used up. It resets at 5:30 AM India time. Until then you can type your idea straight into the idea box.' : 'I could not reach the director (' + (e.message || 'error') + '). Try again.'; msgs.pop(); S.busy = false; }
+        }catch(e){ wait.textContent = 'I could not reach the director. ' + (e.message || 'Unknown error') + '  You can still type your idea into the idea box.'; msgs.pop(); S.busy = false; }
       };
       const useIdea = go => { if(!S.concept) return; quickInput.value = S.concept; if(activeType !== 'video'){ const t = document.querySelector('.type-tab[data-type="video"]'); if(t) t.click(); } close(); if(go) setTimeout(() => generateBtn.click(), 150); else showToast('Idea added. Tap Generate when you are ready.'); };
       const close = () => { stopRec(); try{ if(S.src) S.src.stop(); if(S.mr) S.mr.stop(); }catch(e){} try{ speechSynthesis.cancel(); }catch(e){} ov.remove(); };
@@ -2080,7 +2080,14 @@
         };
         st('Playing…'); tick();
       };
-    }catch(e){ ov.remove(); throw e; }
+    }catch(e){
+      if(!alive){ ov.remove(); return; }
+      // keep the screen open and say what went wrong, instead of vanishing with a toast that disappears
+      try{ ov.querySelectorAll('textarea, input').forEach(x => x.blur()); cv.style.display = ''; }catch(_){}
+      st('⚠ The film stopped: ' + String((e && e.message) || e || 'unknown error').slice(0, 420));
+      $('fs').style.cssText += ';color:#ffb4b4;line-height:1.5;max-width:420px;white-space:pre-wrap;user-select:text';
+      return;
+    }
   }
 
   // ---- gallery: images saved in this browser (localStorage) ----

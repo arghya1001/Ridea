@@ -98,20 +98,22 @@ const geminiJson = j => { const t = geminiText(j); return JSON.parse(t.slice(t.i
 
 async function chain(env, fn) {
   const order = String(env.LLM_ORDER || "gemini,cerebras,openrouter,cf70,cf8").split(",").map(s => s.trim()).filter(Boolean);
-  let last = null, limited = false;
+  let last = null, limited = false; const tried = [];
   for (const p of order) {
-    if (LLM_KEYS[p] && !env[LLM_KEYS[p]]) continue;
-    if (await isCooling(env, "llm:" + p)) continue;
+    if (LLM_KEYS[p] && !env[LLM_KEYS[p]]) { tried.push(p + ": no key set"); continue; }
+    if (await isCooling(env, "llm:" + p)) { tried.push(p + ": resting after an error, retry in a few minutes"); continue; }
     try { return await fn(p); }
     catch (e) {
       last = e;
       const s = e && e.status, lim = s === 429 || /limit|quota|neuron|capacity/i.test(String(e));
+      tried.push(p + ": " + (s ? "error " + s : "") + " " + String((e && e.message) || e).slice(0, 80));
       if (lim) limited = true;
       if (s || lim) await coolFor(env, "llm:" + p, [401, 402, 403].includes(s) ? 3600 : lim ? 600 : 120);   // garbled output does not cool a provider
     }
   }
-  if (limited || !last) throw new Error("Free limit reached: every text AI is busy right now");
-  throw last;
+  const detail = tried.join(" | ").slice(0, 400);
+  if (limited || !last) throw new Error("Free limit reached: every text AI is busy right now (" + detail + ")");
+  throw new Error("Text AI failed (" + detail + ")");
 }
 
 export default {
@@ -489,8 +491,11 @@ export default {
       }
       return send({ error: "Not found" }, 404);
     } catch (e) {
-      const limit = /limit|quota|neuron|capacity/i.test(String(e));
-      return send({ error: limit ? "Free daily limit reached — try again after 00:00 UTC" : "Generation failed — try again" }, limit ? 429 : 500);
+      const msg = String((e && e.message) || e);
+      const cfLimit = /neuron|daily free allocation|4006/i.test(msg) && !/^(Free limit reached|Text AI failed)/.test(msg);
+      const limit = cfLimit || /limit|quota|capacity|429/i.test(msg);
+      const text = cfLimit ? "Cloudflare's free daily allowance is used up. It resets at 00:00 UTC (5:30 AM India time)." : (limit || /^Text AI failed/.test(msg)) ? msg.slice(0, 420) : "Generation failed — try again (" + msg.slice(0, 140) + ")";
+      return send({ error: text }, limit ? 429 : 500);
     }
   },
 };
