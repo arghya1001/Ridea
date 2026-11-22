@@ -855,7 +855,7 @@
           {value:"4:5", sub:"Portrait · Feed"}
         ], value:"9:16"},
         {label:"Duration", key:"dur", options:["5s","10s","15s","30s","60s"], value:"10s"},
-        {label:"Style", key:"style", options:["Cinematic","Anime","Realistic","3D animated"], value:"Cinematic"}
+        {label:"Style", key:"style", options:["Cinematic","Ghibli painterly","Dreamy anime","Realistic","3D animated"], value:"Ghibli painterly"}
       ]
     }
   };
@@ -875,6 +875,7 @@
 
   function renderSettings(type){
     const cfg = settingsConfig[type];
+    if(type === 'video'){ try{ const sg = cfg.groups.find(x => x.key === 'style'); if(sg && STYLES[styleKey]) sg.value = STYLES[styleKey].label; }catch(e){} }   // show the style the film will really use
     settingsInner.innerHTML = cfg.groups.map(g => {
       if(g.ratioChips){
         return `
@@ -932,6 +933,8 @@
     if(!chip) return;
     chip.closest('.setting-group').querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
+    const grp = chip.closest('.setting-group');
+    if(grp.dataset.key === 'style' && activeType === 'video'){ const hit = Object.entries(STYLES).find(([k, v]) => v.label === chip.dataset.value); if(hit){ styleKey = hit[0]; try{ localStorage.setItem('ridea-style', styleKey); }catch(e){} } }
   });
 
   // ---- script wizard: concept → genre suggestions → story alternatives → script ----
@@ -1451,10 +1454,11 @@
     pixar:     {label: '3D animated', add: ', premium 3D animated film still, Pixar-style character design, large expressive eyes, soft warm volumetric lighting, richly detailed environment, depth of field, sharp focus'},
     ghibli:    {label: 'Ghibli painterly', add: ', hand-painted animation film still in a gentle Ghibli-inspired style, soft gouache and watercolor background painting, lush green nature, big soft cumulus clouds, warm natural sunlight, delicate pastel colors, simple expressive hand-drawn characters with soft shading, painterly brush texture, serene nostalgic mood, highly detailed'},
     anime:     {label: 'Dreamy anime', add: ', hand-painted anime fantasy illustration, soft watercolor sky, lush detail, warm gentle light'},
+    realistic: {label: 'Realistic', add: ', natural realistic photograph, true-to-life colors, soft natural daylight, 50mm lens, lifelike textures, sharp focus'},
     off:       {label: 'Off', add: ''}};
   const ORDER = ['ghibli', 'pixar', 'anime', 'cinematic', 'off'];
   let styleKey = 'ghibli'; try{ const sv = localStorage.getItem('ridea-style'); if(STYLES[sv]) styleKey = sv; }catch(e){}
-  const styled = p => STYLES[styleKey].add ? 'Art style: ' + STYLES[styleKey].add.replace(/^,\s*/, '') + '. ' + p + ' (' + STYLES[styleKey].label + ' look, not a photograph.)' : p;
+  const styled = p => !STYLES[styleKey].add ? p : ['ghibli', 'anime', 'pixar'].includes(styleKey) ? 'Art style: ' + STYLES[styleKey].add.replace(/^,\s*/, '') + '. ' + p + ' (' + STYLES[styleKey].label + ' look, not a photograph.)' : 'Style: ' + STYLES[styleKey].add.replace(/^,\s*/, '') + '. ' + p;
   // ---- GLWARP START: character-safe wind. Only leaves, grass and water sway; faces and bodies stay perfectly still. ----
   // ---- Cinematic Parallax: free depth map + WebGL camera move. Pixel-identical to the painted still, no AI video needed ----
   function makeParallax(W, H){
@@ -1561,14 +1565,6 @@
     };
   }
   // ---- GLWARP END ----
-  (function(){
-    const row = document.querySelector('.quick-row'); if(!row) return;
-    const b = document.createElement('button'); b.type = 'button';
-    b.style.cssText = 'margin:0 0 10px;min-height:40px;padding:0 14px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:var(--paper);font:500 13px Inter,sans-serif;cursor:pointer';
-    const paint = () => { b.textContent = 'Style: ' + STYLES[styleKey].label + ' (tap to change)'; b.style.borderColor = styleKey !== 'off' ? '#a99bff' : 'rgba(255,255,255,.16)'; };
-    b.onclick = () => { styleKey = ORDER[(ORDER.indexOf(styleKey) + 1) % ORDER.length]; try{ localStorage.setItem('ridea-style', styleKey); }catch(e){} paint(); };
-    paint(); row.parentNode.insertBefore(b, row);
-  })();
 
   // ---- VOICE DIRECTOR: talk an idea through with Ridea, then hand the concept to the film pipeline ----
   (function(){
@@ -1581,7 +1577,7 @@
       const msgs = [], S = {listening: false, speak: true, hands: !!SR, busy: false, concept: '', rec: null, finalText: ''};
       const ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgb(8,8,20);display:flex;flex-direction:column;color:#fff;font:400 14px Inter,sans-serif';
-      ov.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.12)"><b style="font-size:15px">🎬 Ridea Director</b><span style="display:flex;gap:8px;align-items:center"><select id="dl" style="background:#1b1b33;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px"><option value="en-IN">English</option><option value="hi-IN">हिन्दी</option></select><button id="ds" style="background:none;border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:6px 8px;cursor:pointer">🔊</button><button id="dx" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer;padding:0 4px">×</button></span></div>' +
+      ov.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.12)"><b style="font-size:15px">🎬 Ridea Director</b><span style="display:flex;gap:8px;align-items:center"><select id="dl" style="background:#1b1b33;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px"><option value="en-IN">English</option><option value="hi-IN">हिन्दी</option><option value="bn-IN">বাংলা</option></select><button id="ds" style="background:none;border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:6px 8px;cursor:pointer">🔊</button><button id="dx" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer;padding:0 4px">×</button></span></div>' +
         '<div id="dlog" style="flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px"></div>' +
         '<div id="dc" style="display:none;margin:0 14px 8px;padding:10px;border-radius:12px;background:rgba(169,155,255,.14);border:1px solid rgba(169,155,255,.4)"><div style="font-weight:600;font-size:12px;color:#cfc6ff;margin-bottom:4px">Idea so far</div><div id="dct" style="font-size:13px;line-height:1.4"></div><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button id="du" class="generate-btn" style="padding:10px 14px;border-radius:10px">Use this idea</button><button id="dm" class="generate-btn" style="padding:10px 14px;border-radius:10px">Make the film →</button></div></div>' +
         '<div style="display:flex;gap:8px;align-items:center;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.12)"><button id="dmic" style="flex:none;width:52px;height:52px;border-radius:26px;border:0;background:linear-gradient(135deg,#8b7cff,#e58bd9);font-size:22px;cursor:pointer">🎙</button><input id="dt" type="text" placeholder="Speak, or type your idea…" style="flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;padding:0 12px;font:400 14px Inter,sans-serif"><button id="dsend" style="flex:none;height:44px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:none;color:#fff;cursor:pointer">Send</button></div>';
@@ -1590,53 +1586,94 @@
       const bubble = (who, txt) => { const b = document.createElement('div'); b.textContent = txt; b.style.cssText = 'max-width:86%;padding:9px 12px;border-radius:14px;line-height:1.45;white-space:pre-wrap;' + (who === 'me' ? 'align-self:flex-end;background:rgba(139,124,255,.35)' : 'align-self:flex-start;background:rgba(255,255,255,.09)'); log.appendChild(b); log.scrollTop = log.scrollHeight; return b; };
       const stopRec = () => { try{ if(S.rec) S.rec.stop(); }catch(e){} };
       const setMic = on => { S.listening = on; mic.textContent = on ? '⏹' : '🎙'; mic.style.boxShadow = on ? '0 0 0 6px rgba(229,139,217,.35)' : 'none'; };
+      const hasVoice = lang => { try{ return speechSynthesis.getVoices().some(v => v.lang && v.lang.replace('_', '-').toLowerCase().startsWith(lang.slice(0, 2))); }catch(e){ return false; } };
+      const playPcm = (b64, rate, done) => {
+        try{ const bin = atob(b64), n = bin.length >> 1, f = new Float32Array(n);
+          for(let i = 0; i < n; i++){ let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if(v >= 32768) v -= 65536; f[i] = v / 32768; }
+          const ac = S.ac || (S.ac = new (window.AudioContext || window.webkitAudioContext)()); const buf = ac.createBuffer(1, n, rate || 24000); buf.copyToChannel(f, 0);
+          const src = ac.createBufferSource(); src.buffer = buf; src.connect(ac.destination); src.onended = () => done(); S.src = src; src.start();
+        }catch(e){ done(); }
+      };
       const say = (txt, done0) => {
         let fired = false; const done = () => { if(fired) return; fired = true; if(done0) done0(); };
-        if(!S.speak || !window.speechSynthesis){ done(); return; }
+        if(!S.speak){ done(); return; }
         setTimeout(done, Math.min(25000, 3500 + txt.length * 85));   // some phones never fire the end event
-        try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.lang = langSel.value; u.rate = 1.02;
-          const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.replace('_', '-').toLowerCase().startsWith(langSel.value.slice(0, 2))); if(v) u.voice = v;
-          u.onend = u.onerror = () => { if(done) done(); }; speechSynthesis.speak(u); }catch(e){ if(done) done(); }
+        const browserSay = () => {
+          if(!window.speechSynthesis){ done(); return; }
+          try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(txt); u.lang = langSel.value; u.rate = 1.02;
+            const v = speechSynthesis.getVoices().find(x => x.lang && x.lang.replace('_', '-').toLowerCase().startsWith(langSel.value.slice(0, 2))); if(v) u.voice = v;
+            u.onend = u.onerror = () => done(); speechSynthesis.speak(u); }catch(e){ done(); }
+        };
+        // phones often have no Hindi or Bengali voice: then use the Gemini voice (needs the GEMINI_API_KEY secret)
+        if(!langSel.value.startsWith('en') && !hasVoice(langSel.value) && S.gem !== false){
+          api('/speak', {text: txt}).then(j => { if(fired) return; if(j.pcm) playPcm(j.pcm, j.rate, done); else browserSay(); }).catch(() => { S.gem = false; if(!fired) browserSay(); });
+        } else browserSay();
       };
-      const listen = () => {
+      // Chrome ends a recognition session after a short pause, which cut sentences off ("make a video on"). So keep listening
+      // after each phrase and send only after about 2.5 seconds of silence, or when you tap the mic again.
+      const listen = keep => {
         if(!SR || S.busy) return;
         try{ speechSynthesis.cancel(); }catch(e){}
-        const r = new SR(); S.rec = r; S.finalText = ''; r.lang = langSel.value; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-        r.onstart = () => setMic(true);
-        r.onresult = e => { let fin = '', tmp = ''; for(let i = e.resultIndex; i < e.results.length; i++){ const t = e.results[i][0].transcript; if(e.results[i].isFinal) fin += t; else tmp += t; } if(fin) S.finalText += fin; inp.value = (S.finalText + tmp).trim(); };
-        r.onerror = e => { setMic(false); if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){ showToast('Microphone is blocked. Allow it in the browser, or type instead.'); S.hands = false; } };
-        r.onend = () => { setMic(false); const t = (S.finalText || inp.value).trim(); if(t) send(t); };
+        if(!keep){ S.acc = ''; S.manual = false; }
+        const r = new SR(); S.rec = r; let got = '', any = false; r.lang = langSel.value; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
+        r.onstart = () => { setMic(true); if(keep) S.idle = setTimeout(() => { if(!any) stopRec(); }, 2500); };
+        r.onresult = e => { any = true; clearTimeout(S.idle); let fin = '', tmp = ''; for(let i = e.resultIndex; i < e.results.length; i++){ const t = e.results[i][0].transcript; if(e.results[i].isFinal) fin += t; else tmp += t; } if(fin) got += fin; inp.value = ((S.acc ? S.acc + ' ' : '') + got + tmp).trim(); };
+        r.onerror = e => { clearTimeout(S.idle); setMic(false); if(e.error === 'language-not-supported'){ S.useRec = true; S.hands = false; showToast('This browser cannot hear that language. Tap the mic to record, then tap again to send.'); } if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){ showToast('Microphone is blocked. Allow it in the browser, or type instead.'); S.hands = false; } };
+        r.onend = () => {
+          clearTimeout(S.idle); setMic(false);
+          const total = ((S.acc ? S.acc + ' ' : '') + got).trim() || inp.value.trim();
+          if(got.trim() && !S.manual && document.body.contains(ov)){ S.acc = total; inp.value = total; listen(true); return; }   // more may follow: keep listening
+          S.acc = ''; if(total) send(total);
+        };
         try{ r.start(); }catch(e){ setMic(false); }
+      };
+      const recAudio = async () => {
+        if(S.mr){ try{ S.mr.stop(); }catch(e){} return; }   // second tap stops and sends
+        try{
+          const stream = await navigator.mediaDevices.getUserMedia({audio: true}), chunks = [], mr = new MediaRecorder(stream); S.mr = mr; setMic(true);
+          mr.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+          mr.onstop = async () => {
+            S.mr = null; setMic(false); stream.getTracks().forEach(t => t.stop());
+            const blob = new Blob(chunks, {type: mr.mimeType || 'audio/webm'}); if(blob.size < 1500) return;
+            const wait = bubble('me', '…');
+            try{
+              const b64 = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1]); fr.onerror = rej; fr.readAsDataURL(blob); });
+              const j = await api('/transcribe', {audio: b64, mime: (blob.type || 'audio/webm').split(';')[0], lang: langSel.value});
+              wait.remove(); if(j.text && j.text.trim()) send(j.text.trim()); else showToast('I did not catch that. Try again.');
+            }catch(e){ wait.remove(); showToast(e.message || 'Could not transcribe'); }
+          };
+          mr.start(); setTimeout(() => { if(S.mr === mr){ try{ mr.stop(); }catch(e){} } }, 30000);
+        }catch(e){ showToast('Microphone is blocked. Allow it in the browser, or type instead.'); }
       };
       const send = async text => {
         text = String(text || inp.value).trim(); if(!text || S.busy) return;
         inp.value = ''; bubble('me', text); msgs.push({role: 'user', content: text}); S.busy = true;
         const wait = bubble('bot', '…');
         try{
-          const j = await api('/director', {messages: msgs});
+          const j = await api('/director', {messages: msgs, lang: langSel.value});
           wait.textContent = j.reply; msgs.push({role: 'assistant', content: j.reply});
           if(j.concept){ S.concept = j.concept; $('dct').textContent = j.concept; $('dc').style.display = 'block'; }
           S.busy = false; log.scrollTop = log.scrollHeight;
-          say(j.reply, () => { if(S.hands && SR && document.body.contains(ov)) listen(); });
-        }catch(e){ wait.textContent = 'I could not reach the director (' + (e.message || 'error') + '). Try again.'; msgs.pop(); S.busy = false; }
+          say(j.reply, () => { if(S.hands && SR && document.body.contains(ov)) listen(false); });
+        }catch(e){ wait.textContent = /limit|busy|quota/i.test(e.message || '') ? 'The free AI limit for today is used up. It resets at 5:30 AM India time. Until then you can type your idea straight into the idea box.' : 'I could not reach the director (' + (e.message || 'error') + '). Try again.'; msgs.pop(); S.busy = false; }
       };
       const useIdea = go => { if(!S.concept) return; quickInput.value = S.concept; if(activeType !== 'video'){ const t = document.querySelector('.type-tab[data-type="video"]'); if(t) t.click(); } close(); if(go) setTimeout(() => generateBtn.click(), 150); else showToast('Idea added. Tap Generate when you are ready.'); };
-      const close = () => { stopRec(); try{ speechSynthesis.cancel(); }catch(e){} ov.remove(); };
-      mic.onclick = () => { if(S.listening){ stopRec(); } else listen(); };
+      const close = () => { stopRec(); try{ if(S.src) S.src.stop(); if(S.mr) S.mr.stop(); }catch(e){} try{ speechSynthesis.cancel(); }catch(e){} ov.remove(); };
+      mic.onclick = () => { if(!SR || S.useRec){ recAudio(); return; } if(S.listening){ S.manual = true; stopRec(); } else listen(false); };
       $('dsend').onclick = () => send();
       inp.onkeydown = e => { if(e.key === 'Enter') send(); };
       $('dx').onclick = close; $('du').onclick = () => useIdea(false); $('dm').onclick = () => useIdea(true);
       $('ds').onclick = () => { S.speak = !S.speak; $('ds').textContent = S.speak ? '🔊' : '🔇'; if(!S.speak){ try{ speechSynthesis.cancel(); }catch(e){} } };
       const hello = 'Hi, I am your director. Tell me your film idea, by voice or text, and we will shape it together.';
-      bubble('bot', hello); if(!SR) bubble('bot', 'Voice input is not supported in this browser. Chrome on Android works best. You can still type to me.');
-      say(hello, () => { if(S.hands && SR && document.body.contains(ov)) listen(); });
+      bubble('bot', hello); if(!SR) bubble('bot', 'This browser has no live speech recognition. Tap the mic, speak, then tap again to send. Or just type.');
+      say(hello, () => { if(S.hands && SR && document.body.contains(ov)) listen(false); });
     };
   })();
 
   let FN = 4; const FD = 3.2, FW = 540, FH = 720, SC = 1.5;   // SC = render scale: sharper canvas, same layout
   async function makeFilm(idea){
     const ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgb(8,8,20);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;overflow:auto';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgb(8,8,20);display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:12px;padding:16px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch';   // safe center: tall content (5 paintings) scrolls from the top instead of being cut off
     ov.innerHTML = `<canvas width="${FW*SC}" height="${FH*SC}" style="width:min(100%,360px);aspect-ratio:3/4;border-radius:16px;background:#14142b"></canvas>
       <div id="fs" style="color:#cfc6ff;font:500 14px Inter,sans-serif;text-align:center;min-height:20px">Writing your story…</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button id="fp" class="generate-btn" style="display:none;padding:12px 20px;border-radius:12px">Play film</button>
