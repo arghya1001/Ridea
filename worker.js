@@ -96,6 +96,19 @@ async function geminiCall(env, parts, o = {}) {
 const geminiText = j => (((j.candidates || [])[0] || {}).content || { parts: [] }).parts.map(p => p.text || "").join("");
 const geminiJson = j => { const t = geminiText(j); return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)); };
 
+// Picture analyzer (/check, /compare): Gemini first. When Gemini hits its free limit (or errors), it rests for a while
+// and Cloudflare vision takes over automatically; Gemini is tried again once the rest is over. Returns null = "use Cloudflare".
+async function geminiVision(env, parts, o) {
+  if (!env.GEMINI_API_KEY || await isCooling(env, "vis:gemini")) return null;
+  try { return geminiJson(await geminiCall(env, parts, o)); }
+  catch (e) {
+    const s = e && e.status, lim = s === 429 || /limit|quota|exhausted/i.test(String((e && e.message) || e));
+    const sec = [401, 403].includes(s) ? 3600 : lim ? 900 : (s || (e && e.name === "TimeoutError")) ? 120 : 0;   // garbled output does not cool Gemini
+    if (sec) await coolFor(env, "vis:gemini", sec);
+    return null;
+  }
+}
+
 async function chain(env, fn) {
   const order = String(env.LLM_ORDER || "gemini,cerebras,openrouter,cf70,cf8").split(",").map(s => s.trim()).filter(Boolean);
   let last = null, limited = false; const tried = [];
@@ -355,14 +368,12 @@ export default {
         const image = String(body.image || "");
         if (!image) return send({ ok: true });
         if (image.length > 900000) return send({ error: "Image too large" }, 413);
-        if (env.GEMINI_API_KEY) {
-          try {
-            const j = await geminiCall(env, [{ text: 'This image shows two pictures side by side from the same film. The left one is the reference scene, the right one is a new scene. Judge ONLY the characters, animals and objects that appear in BOTH pictures: are they the same (same species, face, hair or fur color, body shape, clothing colors, same props)? Different poses, camera angles, backgrounds and light are fine. Reply ONLY {"same":true or false,"differences":["short description of each real difference"]}' }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 250 });
-            const r = geminiJson(j);
-            const diffs = (Array.isArray(r.differences) ? r.differences : []).map(s => String(s).slice(0, 70)).slice(0, 3);
-            return send({ ok: r.same !== false, failed: diffs, by: "gemini" });
-          } catch (e) { /* fall through */ }
+        const gr = await geminiVision(env, [{ text: 'This image shows two pictures side by side from the same film. The left one is the reference scene, the right one is a new scene. Judge ONLY the characters, animals and objects that appear in BOTH pictures: are they the same (same species, face, hair or fur color, body shape, clothing colors, same props)? Different poses, camera angles, backgrounds and light are fine. Reply ONLY {"same":true or false,"differences":["short description of each real difference"]}' }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 250 });
+        if (gr) {
+          const diffs = (Array.isArray(gr.differences) ? gr.differences : []).map(s => String(s).slice(0, 70)).slice(0, 3);
+          return send({ ok: gr.same !== false, failed: diffs, by: "gemini" });
         }
+        // Gemini busy or unavailable: Cloudflare vision takes over
         const bin = atob(image), bytes = new Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const qs = [
@@ -387,14 +398,12 @@ export default {
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         if (body.exact) {   // describe first, then a text model compares the description with the checklist
           const absent = (Array.isArray(body.absent) ? body.absent : []).slice(0, 5).map(s => String(s).slice(0, 60)).filter(Boolean);
-          if (env.GEMINI_API_KEY) {   // Gemini looks at the picture and compares it with the checklist in one step
-            try {
-              const j = await geminiCall(env, [{ text: `You check one picture from a film storyboard against a checklist. Look at it carefully.\nExpected to be visible: ${subjects.join("; ")}\nMust NOT be visible: ${absent.join("; ") || "nothing in particular"}\nNo other person or animal may appear besides the expected ones, and no expected character may appear twice.\nReply ONLY {"missing":["expected items that are not in the picture"],"unexpected":["people, animals or objects that are not expected, appear twice, or are in the must-not-be-visible list"]}` }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 300 });
-              const r = geminiJson(j);
-              const miss = (Array.isArray(r.missing) ? r.missing : []).map(s => String(s).slice(0, 80)), extra = (Array.isArray(r.unexpected) ? r.unexpected : []).map(s => String(s).slice(0, 80));
-              return send({ ok: !miss.length && !extra.length, missing: miss, unexpected: extra, by: "gemini" });
-            } catch (e) { /* fall through to the Cloudflare vision path */ }
+          const gr = await geminiVision(env, [{ text: `You check one picture from a film storyboard against a checklist. Look at it carefully.\nExpected to be visible: ${subjects.join("; ")}\nMust NOT be visible: ${absent.join("; ") || "nothing in particular"}\nNo other person or animal may appear besides the expected ones, and no expected character may appear twice.\nReply ONLY {"missing":["expected items that are not in the picture"],"unexpected":["people, animals or objects that are not expected, appear twice, or are in the must-not-be-visible list"]}` }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 300 });
+          if (gr) {
+            const miss = (Array.isArray(gr.missing) ? gr.missing : []).map(s => String(s).slice(0, 80)), extra = (Array.isArray(gr.unexpected) ? gr.unexpected : []).map(s => String(s).slice(0, 80));
+            return send({ ok: !miss.length && !extra.length, missing: miss, unexpected: extra, by: "gemini" });
           }
+          // Gemini busy or unavailable: Cloudflare vision takes over
           try {
             const o = await env.AI.run(VISION_MODEL, { image: bytes, max_tokens: 230, prompt: "Describe this picture in detail. List every person and every animal one by one: say what each is, what it wears on its head and body, what it holds in its hands, and where it stands. Also name any other main objects." });
             const desc = String(o.description || o.response || "").slice(0, 1500);
@@ -408,6 +417,8 @@ export default {
             return send({ ok: !miss.length && !extra.length, missing: miss, unexpected: extra });
           } catch (e) { return send({ ok: true, missing: [], unexpected: [] }); }   // checker unavailable: never block the film
         }
+        const gr2 = await geminiVision(env, [{ text: `Look carefully at this picture. For each item in this list, say whether it is clearly visible: ${subjects.join("; ")}\nReply ONLY {"missing":["items from the list that are NOT clearly visible"]}` }, { inline_data: { mime_type: "image/jpeg", data: image } }], { json: true, max: 200 });
+        if (gr2) { const miss = (Array.isArray(gr2.missing) ? gr2.missing : []).map(s => String(s).slice(0, 160)); return send({ ok: !miss.length, missing: miss, by: "gemini" }); }
         const missing = [];
         await Promise.all(subjects.map(async s => {
           try {
