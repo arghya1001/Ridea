@@ -1849,7 +1849,7 @@
         if(i === 0){ try{ const c = document.createElement('canvas'); c.width = 480; c.height = 640; c.getContext('2d').drawImage(imgs[0], 0, 0, 480, 640); refB64 = c.toDataURL('image/jpeg', .88).split(',')[1]; }catch(e){} }   // scene 1 = the character reference for scenes 2-4
       };
       // consistency gate: a vision model checks every subject is really in each picture; failures are repainted automatically
-      const bad = new Set();
+      const bad = new Set(), badWhy = {};
       const sideBySide = (a, b) => { const c = document.createElement('canvas'); c.width = 768; c.height = 512; const g = c.getContext('2d'); g.drawImage(a, 0, 0, 384, 512); g.drawImage(b, 384, 0, 384, 512); return c.toDataURL('image/jpeg', .8).split(',')[1]; };
       const fp = im => { const c = document.createElement('canvas'); c.width = 24; c.height = 32; const g = c.getContext('2d'); g.drawImage(im, 0, 0, 24, 32); const d = g.getImageData(0, 0, 24, 32).data, o = []; for(let p = 0; p < d.length; p += 4) o.push(d[p] * .3 + d[p+1] * .59 + d[p+2] * .11); return o; };
       const tooSimilar = i => { try{ const a = fp(imgs[i]); for(let k = Math.max(0, i - 1); k < i; k++){ const b = fp(imgs[k]); let s = 0; for(let q = 0; q < a.length; q++) s += Math.abs(a[q] - b[q]); if(s / a.length < 14) return k; } }catch(e){} return -1; };
@@ -1880,7 +1880,7 @@
           if(r.ok){ bad.delete(i); return; }
           if(t < 2) st(`Scene ${i + 1} failed the check (${(r.missing || []).length ? 'missing: ' + r.missing.join('; ') : r.reason || 'inconsistent'}). Repainting, try ${t + 2} of 3…`);
         }
-        bad.add(i);
+        bad.add(i); badWhy[i] = (r.missing && r.missing.length ? 'missing: ' + r.missing.join('; ') : r.reason || 'inconsistent');
       };
       // scene 1 is the character reference for the whole film, so the user picks the better of two versions
       const pickAnchor = async () => {
@@ -1917,7 +1917,7 @@
           if(busy) return; busy = true; bm.disabled = bs.disabled = true;
           const list = i === 0 ? [0, 1, 2, 3] : [i];   // repainting scene 1 changes the character, so the rest follow it
           try{
-            for(const k of list){ ths[k].style.opacity = .35; st(`Repainting scene ${k + 1}…`); await paintChecked(k, 1 + Math.floor(Math.random()*999999)); ths[k].src = imgs[k].src; ths[k].style.outline = bad.has(k) ? '3px solid #ff6b6b' : 'none'; ths[k].style.opacity = 1; }
+            for(const k of list){ ths[k].style.opacity = .35; st(`Repainting scene ${k + 1}…`); await paintChecked(k, 1 + Math.floor(Math.random()*999999)); ths[k].src = imgs[k].src; ths[k].style.outline = bad.has(k) ? '3px solid #ff6b6b' : 'none'; ths[k].title = bad.has(k) ? badWhy[k] : ''; ths[k].style.opacity = 1; }
           }catch(e){ list.forEach(k => ths[k].style.opacity = 1); }
           st('Tap a scene to repaint it. Happy with them? Choose below.'); busy = false; bm.disabled = bs.disabled = false;
         };
@@ -1933,7 +1933,7 @@
         bc.onclick = async () => { bc.disabled = true; gpu.textContent = 'Checking…'; try{ const vs = await api('/video-status', {}); motion = vs.available === true; clipsLeft = vs.clipsLeftToday; gpus = vs.gpus || 0; gpuWhy = vs.detail || ''; }catch(e){ motion = false; gpuWhy = 'Could not reach the Worker.'; } bc.disabled = false; showGpu(); };
         if(motion) row.appendChild(bm); else row.appendChild(bc); row.appendChild(bs); rv.append(grid, gpu, row); showGpu();
         cv.style.display = 'none'; cv.after(rv);
-        st(bad.size ? 'Red-outlined scenes still failed the consistency check. Tap them to repaint.' : 'All scenes passed the consistency check. Tap one to repaint it, or choose below.');
+        st(bad.size ? 'Red-outlined scenes still failed the consistency check. Tap them to repaint. ' + [...bad].map(k => 'Scene ' + (k + 1) + ': ' + (badWhy[k] || 'inconsistent')).join(' | ') : 'All scenes passed the consistency check. Tap one to repaint it, or choose below.');
         const done = c => { rv.remove(); cv.style.display = ''; wake = null; resolve(c); };
         bm.onclick = () => done('motion'); bs.onclick = () => done('still');
       });

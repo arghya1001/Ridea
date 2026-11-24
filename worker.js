@@ -162,7 +162,7 @@ export default {
 
     try {
       if (path === "/image") {
-        const prompt = String(body.prompt || "").slice(0, 3600);
+        const prompt = String(body.prompt || "").slice(0, 4600);
         if (!prompt) return send({ error: "Describe the image first" }, 400);
         const W = Math.min(1024, Math.max(256, (parseInt(body.w) || 1024) & ~15)), H = Math.min(1024, Math.max(256, (parseInt(body.h) || 1024) & ~15));
         const ref = String(body.ref || "");
@@ -187,7 +187,7 @@ export default {
           try { const img = await tryKlein(list); if (img) return send({ image: img, model: "klein", refs: list.length }); }
           catch (e) { if (/limit|quota|neuron|capacity/i.test(String(e))) throw e; }
         }
-        const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt.slice(0, 500) + tail, steps: 4 });   // fallback: no reference
+        const out = await env.AI.run(IMAGE_MODEL, { prompt: prompt.slice(0, 1100) + tail, steps: 4 });   // fallback: no reference
         return send({ image: out.image, model: "schnell" });
       }
       if (path === "/concept") {
@@ -284,7 +284,7 @@ export default {
         // The model only fills in a small "story bible"; the CODE then builds every image prompt from it,
         // so the same characters, costume, props and place are repeated word for word in all 4 scenes.
         const sys = `You are a film director planning a storyboard: one picture per visible story step. The user gives a short idea (and maybe an approved story and script). An image generator will paint each scene from your words alone and knows NOTHING about the story, so every scene needs a complete shot sheet that says who is visible, exactly where each one stands, what each hand holds, and what is NOT in the picture. Reply with ONLY one JSON object:
-{"story":"...","plan":"...","characters":[{"name":"...","short":"...","look":"..."}],"objects":[{"name":"...","look":"..."}],"setting":"...","beats":[{"caption":"...","camera":"...","backdrop":"...","positions":[{"who":"...","where":"...","facing":"...","head":"...","pose":"...","hands":"...","face":"..."}],"props":"...","absent":["..."],"light":"...","must_show":["..."],"motion":"..."}]}
+{"story":"...","plan":"...","characters":[{"name":"...","short":"...","look":"..."}],"objects":[{"name":"...","look":"..."}],"setting":"...","beats":[{"caption":"...","camera":"...","framing":"...","backdrop":"...","positions":[{"who":"...","x":"...","depth":"...","where":"...","size":"...","facing":"...","eyeline":"...","head":"...","pose":"...","hands":"...","expression":"..."}],"props":"...","absent":["..."],"light":"...","must_show":["..."],"motion":"..."}]}
 "story": a short retelling with beginning, middle and end, naming the characters and the one fixed place. If an approved story or script is given, keep its characters, place and events exactly and make the beats follow it in order.
 "plan": one short sentence saying what you adapted to make the idea drawable, or an empty string.
 "characters": 1 to 5 main characters (animals and important objects count too). Short unique names. "short" = under 15 words a person could use to check a picture. "look" = 20-30 words of exact visual detail: species in plain words and what it is NOT (for example "human baby, no fur, no tail"), age, hair or fur, and the full costume and props with exact counts and colors. If the idea names a role (magician, chef, knight, astronaut...), the look MUST include that role's recognisable costume and prop (a knight: silver armor, red cape, a sword; a prop the story is about is listed under objects, not in the look). Give each character a different dominant color and ONE or TWO easy-to-draw clothing or accessory details (a puppy: pure white fur and a blue collar; a girl: a green coat and a red scarf), written BEFORE any other detail. NEVER invent face or body marks: no scars, patches, eye patches, piercings, tattoos, necklaces, glasses, freckles or makeup. Repeat the same details exactly in every beat. Adapt physically awkward ideas (a baby on a bike becomes a toddler in a helmet on a tricycle).
@@ -292,9 +292,10 @@ export default {
 "setting": one fixed place with 4 fixed visible elements and a time of day, 20-30 words, matching the idea (a kitchen: a wooden table, a window with curtains, a stove and a hanging lamp, morning light). The place never changes between scenes.
 "beats": a storyboard of as many beats as the story really needs to be told clearly, no more and no fewer: one beat for a single moment, 2 or 3 for a very simple idea, more when the story has several distinct visible steps (5, 8, 12 or more if it takes that). Give every distinct visible action its own beat, in story order, and never skip a step or pad with filler. Beat 1 sets the scene and the last beat is the ending. For each beat:
 "caption" = one warm sentence of 6-12 words describing ONLY what is visible in that picture.
-"camera" = shot size, angle and height, for example "wide full-body shot, eye level, camera 4 metres away" (beat 1 must be wide or medium full-body so every character is fully visible; each later beat uses the camera that best shows its step, clearly different from the beat before it).
+"camera" = ONE exact shot: shot size (extreme close-up, close-up, medium close-up, medium, full-body or wide), angle (eye level, low angle, high angle, over-the-shoulder, or from behind), and distance, for example "wide full-body shot, eye level, camera 4 metres away" (beat 1 must be wide or medium full-body so every character is fully visible; each later beat uses the camera that best shows its step, clearly different from the beat before it).
+"framing" = the composition in one sentence: who is on the left, center and right of the frame, what is in the foreground, middle and background, and where the empty space is (for example "Emma on the left third, Olivia on the right third, the rabbit small in the center foreground between them, curtain filling the whole background").
 "backdrop" = which setting elements are visible behind the characters and where in the frame (for example "brick wall fills the background, a window on the right, sunlight from the top left").
-"positions" = one entry for EVERY character visible in this picture, and no one else. "who" = the character's name. "where" = exact place in the frame and on the floor, using left, center, right, near, far and what they are next to (for example "center of the frame, standing on the grass one step in front of the fence"). "facing" = toward the camera, to the left, to the right, or at another character. "pose" = exact body pose. "head" = exactly what is on the head (describe only what IS there, in positive words, for example "wearing the red cap" or "short curly brown hair"). "hands" = exactly what each hand holds or does. "face" = the expression.
+"positions" = one entry for EVERY character visible in this picture, and no one else, so the painter never has to guess. "who" = the character's name. "x" = horizontal place in the frame, exactly one of: far left, left, center-left, center, center-right, right, far right. "depth" = foreground, midground or background. "where" = the exact spot in the scene and what they stand next to (for example "on the red carpet one step in front of the curtain, next to the hat"). "size" = how big they are in the frame (for example "full body, about 60 percent of the frame height" or "head and shoulders fill the frame"). "facing" = toward the camera, left, right, away, or at another character. "eyeline" = exactly what the eyes look at. "pose" = exact body pose. "head" = exactly what is on the head (describe only what IS there, in positive words, for example "wearing the black top hat" or "short black hair"). "hands" = exactly what each hand holds or does. "expression" = the exact facial expression with eyes, eyebrows and mouth (for example "wide eyes, raised eyebrows, open delighted smile").
 "props" = the exact position and state of each key object in this picture, repeating the same object word for word (for example "the green watering can is tilted in her right hand and water streams out onto the red tulip"). The object the story is about stays visible in every beat where it matters. Every beat shows a DIFFERENT moment of the story, in story order. A character is present in exactly the beats where the story has them acting. An animal or small creature is always its own separate body next to or held by a person, never attached to a head or body.
 "absent" = things or characters that must NOT appear in this picture. Only characters who truly have not appeared yet in the story go here; follow the story's own order. Never list a character here if the story shows them in this beat.
 "light" = a few words (for example "warm spotlight from the top left, soft shadows").
@@ -310,24 +311,34 @@ export default {
           const beats = (Array.isArray(obj.beats) ? obj.beats : obj.scenes || []).slice(0, 24).filter(x => x && x.caption);
           if (!chars.length || !setting || beats.length < 1) throw new Error("bad plan");
           const findChar = who => { const q = String(who || "").toLowerCase().trim(); return chars.find(c => c.name && (String(c.name).toLowerCase() === q || q.includes(String(c.name).toLowerCase()) || String(c.name).toLowerCase().includes(q))); };
+          const objWords = (Array.isArray(obj.objects) ? obj.objects : []).slice(0, 3).map(o => String((o && o.name) || "").toLowerCase().trim().split(/\s+/).pop()).filter(x => x.length > 2 && /^[a-z]+$/.test(x));
+          const dropObj = s => { let r = String(s); for (const x of objWords) r = r.replace(new RegExp("(?:,\\s*|\\band\\s+)?(?:(?:wearing|with|holding|carrying)\\s+)?(?:an?\\s+|the\\s+)?(?:[a-z-]+\\s+){0,3}" + x + "s?\\b", "gi"), ""); return r.replace(/(?:,|\band|\bwearing|\bwith|\bholding)\s*$/i, "").replace(/\s+,/g, ",").replace(/\s{2,}/g, " ").trim(); };   // the hat is ONE object: it lives in "objects" and each beat's head/hands, not in the costume text
           const BAD = /[,;(]?\s*\b(?:a |an |one |tiny |small |silver |black |dark )*(?:nose ring|nose piercing|piercings?|tattoos?|scars?|eye ?patch(?:es)?|patch(?:es)? (?:around|over|on)[^,.;)]*|necklaces?|glasses|freckles|birthmarks?|makeup)\b[^,.;)]*/gi;
           const clip = (s, n) => { s = String(s || ""); if (s.length <= n) return s; const cut = s.slice(0, n), k = Math.max(cut.lastIndexOf(","), cut.lastIndexOf(" ")); return (k > n * 0.6 ? cut.slice(0, k) : cut).replace(/[,\s]+$/, ""); };
-          const looks = (c, n) => (c.name ? String(c.name).slice(0, 20) + ": " : "") + clip(String(c.look).replace(BAD, "").replace(/[,;]?\s*identifying marks?:\s*$/i, "").replace(/identifying marks?:/gi, "details:").replace(/[,;(]?\s*\b(no|not|never|without)\b[^,.;)]*/gi, ""), n);
+          const looks = (c, n) => (c.name ? String(c.name).slice(0, 20) + ": " : "") + clip(dropObj(c.look).replace(BAD, "").replace(/[,;]?\s*identifying marks?:\s*$/i, "").replace(/identifying marks?:/gi, "details:").replace(/[,;(]?\s*\b(no|not|never|without)\b[^,.;)]*/gi, ""), n);
           const charTxt = chars.map(c => looks(c, 260)).join(" ");
           const t = (x, n) => String(x || "").replace(/\b(bare[- ]headed|bare head|hatless)\b/gi, "uncovered curly hair").replace(/[,;(]?\s*\b(no|not|never|without)\b[^,.;)]*/gi, "").replace(/\s{2,}/g, " ").trim().slice(0, n);
           const objs = (Array.isArray(obj.objects) ? obj.objects : []).slice(0, 2).filter(o => o && o.name && o.look).map(o => `${t(o.name, 30)}: ${t(o.look, 150)}`).join(" ");
           const scenes = beats.map(b => {
-            const posList = (Array.isArray(b.positions) ? b.positions : []).filter(p => p && p.who).slice(0, 3);
+            const posList = (Array.isArray(b.positions) ? b.positions : []).filter(p => p && p.who).slice(0, 4);
             if (!posList.length) throw new Error("bad plan");
             const here = posList.map(p => findChar(p.who)).filter(Boolean);
-            const detail = n => posList.map(p => { const c = findChar(p.who); return `${c ? looks(c, n) : t(p.who, 30)}. Position: ${t(p.where, 110)}, facing ${t(p.facing, 30)}. Head: ${t(p.head, 60)}. Pose: ${t(p.pose, 140)}. Hands: ${t(p.hands, 140)}. Face: ${t(p.face, 30)}.`; }).join(" ");
+            const XR = { "far left": 0, "center-left": 2, "center left": 2, "center-right": 4, "center right": 4, "far right": 6, "left": 1, "right": 5, "center": 3, "middle": 3 };
+            const xRank = x => { const s = String(x || "").toLowerCase().replace(/[^a-z -]/g, ""); for (const k of Object.keys(XR)) if (s.includes(k)) return XR[k]; return 3; };
+            const ordered = posList.map((p, i) => ({ p, i, r: xRank(p.x) })).sort((u, v) => u.r - v.r || u.i - v.i).map(o => o.p);   // painted left to right, so the painter reads the frame in order
+            const nameOf = p => { const c = findChar(p.who); return c && c.name ? String(c.name).slice(0, 20) : t(p.who, 20); };
+            const block = (p, k, n) => { const c = findChar(p.who);
+              return `${k + 1}. ${nameOf(p)}${c ? ": " + looks(c, n).replace(/^[^:]*:\s*/, "") : ""}\n   Placement: ${t(p.x, 20) || "center"} of the frame, ${t(p.depth, 20) || "midground"}; ${t(p.where, 110)}. Size in frame: ${t(p.size, 70)}.\n   Facing ${t(p.facing, 30)}, eyes looking at ${t(p.eyeline, 50)}.\n   Pose: ${t(p.pose, 140)}. Head: ${t(p.head, 60)}. Hands: ${t(p.hands, 140)}.\n   Expression: ${t(p.expression || p.face, 80)}.`; };
             const absent = (Array.isArray(b.absent) ? b.absent : []).slice(0, 4).map(s => t(s, 40)).filter(Boolean).join(", ");
             const must = (Array.isArray(b.must_show) ? b.must_show : []).slice(0, 4).map(s => t(s, 50)).filter(Boolean).join(", ");
-            const common = `${objs ? "Key object details: " + objs + ". " : ""}Key objects in this picture: ${t(b.props, 160)}.${must ? " Must be clearly visible: " + must + "." : ""} Light: ${t(b.light, 60)}.`;
+            const nm = ordered.map(nameOf), n = nm.length;
+            const head = `STORY MOMENT: ${t(b.caption, 90)}.\nSHOT: ${t(b.camera, 100)}. Composition: ${t(b.framing, 200) || "characters spread across the frame, none hidden"}.\nCAST: exactly ${n} ${n === 1 ? "character" : "characters"} in the picture: ${nm.join(", ")}. Each appears once and these are the only characters.`;
+            const tailTxt = `\nOBJECTS: ${objs ? objs.replace(/[.\s]*$/, ". ") : ""}In this picture: ${t(b.props, 170)}. Each object appears once.\nLIGHT: ${t(b.light, 60)}.${must ? "\nMUST BE CLEARLY VISIBLE: " + must + "." : ""}`;
+            const sheetOf = (n2, withSetting) => `${head}\nCHARACTERS, listed from left to right across the frame:\n${ordered.map((p, k) => block(p, k, n2)).join("\n")}\nBACKGROUND: ${withSetting ? setting.replace(/[.\s]+$/, "") + ". " : ""}Visible behind the characters: ${t(b.backdrop, 140)}.${tailTxt}`;
             return {
               caption: t(b.caption, 90),
-              visual: `What happens: ${t(b.caption, 90)}. Camera: ${t(b.camera, 90)}. Setting: ${setting.replace(/[.\s]+$/, "")}. Visible behind: ${t(b.backdrop, 140)}. ${detail(260)} ${common} Every character listed is fully visible. No text in the image.`.slice(0, 2600),
-              edit: `What happens: ${t(b.caption, 90)}. Camera: ${t(b.camera, 90)}. Visible behind: ${t(b.backdrop, 140)}. ${detail(200)} ${common}`.slice(0, 2200),   // used when a reference picture exists: written as an edit
+              visual: (sheetOf(230, true) + "\nEvery listed character is fully visible. No text in the image.").slice(0, 3200),
+              edit: sheetOf(170, false).slice(0, 2800),   // used when a reference picture exists: the reference carries the faces and costumes, so the looks are shorter
               absent: (Array.isArray(b.absent) ? b.absent : []).slice(0, 4).map(s => t(s, 40)).filter(Boolean),
               present: (here.length ? here : chars).map(c => String(c.name || "").slice(0, 30)),
               subjects: (here.length ? here : chars).map(c => String(c.short || c.look).slice(0, 120)),
